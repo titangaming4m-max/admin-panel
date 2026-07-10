@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dora Ad Admin Panel 1™ - Service Plans</title>
+    <!-- Google Fonts: Poppins -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" integrity="sha512-z3gLpd7yknf1YoNbCzqRKc4qyor8gaKU1qmn+CShxbuBusANI9QpRohGBreCFkKxLhei6S9CQXFEbbKuqLg0DA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <!-- Global CSS -->
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body class="bg-[#F0F2F5] font-['Poppins',sans-serif] text-slate-800 antialiased min-h-screen">
+    
+    <div class="app-container">
+      
+      <!-- Top Green Offer Bar -->
+      <div class="offer-bar">
+        🔥 LIMITED TIME OFFER 🔥 1,000 LIKES FOR JUST ₹69!
+      </div>
+
+      <!-- Header Section -->
+      <header class="app-header" id="detail-app-header">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <!-- Back button redirects back to index.html -->
+          <a href="index.html" class="logo-circle" style="background-color: #F1F5F9; color: #334155; width: 40px; height: 40px; text-decoration: none;">
+            <i class="fa-solid fa-arrow-left" style="font-size: 15px;"></i>
+          </a>
+
+          <!-- Current Service Details -->
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="service-img" style="background: linear-gradient(135deg, #8E2DE2, #4A00E0); display: flex; align-items: center; justify-content: center; p: 4px; border-radius: 8px; width: 44px; height: 44px;">
+              <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 28px; height: 28px; filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));">
+                <circle cx="50" cy="50" r="32" stroke="#E100FF" stroke-width="3" stroke-dasharray="6 6" />
+                <rect x="35" y="35" width="30" height="30" rx="6" fill="#FFFFFF" />
+                <circle cx="50" cy="50" r="6" fill="#4A00E0" />
+                <path d="M50 15 V35 M50 65 V85 M15 50 H35 M65 50 H85" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" />
+              </svg>
+            </div>
+            <div style="display: flex; flex-direction: column;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <h2 style="font-size: 13px; font-weight: 800; text-transform: uppercase; margin: 0; color: #1E293B;">
+                  DRIPCLIENT PROXY NON ROOT
+                </h2>
+                <span class="verified-badge" style="margin-left: 2px;"><i class="fa-solid fa-check"></i></span>
+              </div>
+              <p class="service-subtitle" style="margin: 0;">DRIPCLIENT PROXY</p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Category Filter Pills -->
+      <div class="filter-pills-row no-scrollbar" style="margin-top: 20px;">
+        <button class="filter-pill active">All</button>
+        <button class="filter-pill">7 DAYS</button>
+        <button class="filter-pill">14 DAYS</button>
+        <button class="filter-pill">30 DAYS</button>
+        <button class="filter-pill">365 DAYS</button>
+      </div>
+
+      <!-- Plan Cards Container -->
+      <div class="plan-cards-container">
+        
+        <!-- CARD 1: 7 DAYS -->
+        <div class="plan-card">
+          <div class="plan-top-row">
+            <div style="display: flex; align-items: start; gap: 12px;">
+              <div class="service-img" style="background: linear-gradient(135deg, #8E2DE2, #4A00E0); display: flex; align-items: center; justify-content: center; border-radius: 8px; width: 52px; height: 52px;">
+                <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 32px; height: 32px;">
+                  <circle cx="50" cy="50" r="32" stroke="#E100FF" stroke-width="3" stroke-dasharray="6 6" />
+                  <rect x="35" y="35" width="30" height="30" rx="6" fill="#FFFFFF" />
+                  <circle cx="50" cy="50" r="6" fill="#4A00E0" />
+                </path></svg>
+              </div>
+              <div>
+                <span class="duration-tag">7 DAYS</span>
+                <h3 style="font-size: 13px; font-weight: 700; color: #1E293B; text-transform: uppercase; display: flex; align-items: center; gap: 4px;">
+                  DRIPCLIENT PROXY NON ROOT PANEL
+                  <span class="verified-badge" style="width: 14px; height: 14px; font-size: 8px;"><i class="fa-solid fa-check"></i></span>
+                </h3>
+                <span class="plan-qty">Qty: 7</span>
+              </div>
+            </div>
+            <div class="plan-price-block">
+              <span class="plan-price">₹250</span>
+              <span class="plan-old-price">₹400</span>
+            </div>
+          </div>
+          <button class="btn-buy-now">
+            <span>BUY NOW</span>
+            <i class="fa-solid fa-chevron-right" style="font-size: 10px;"></i>
+          </button>
+        </div>
+
+        <!-- CARD 2: 14 DAYS -->
+        <div class="plan-card">
+          <div class="plan-top-row">
+            <div style="display: flex; align-items: start; gap: 12px;">
+              <div class="service-img" style="background: linear-gradient(135deg, #8E2DE2, #4A00E0); display: flex; align-items: center; justify-content: center; border-radius: 8px; width: 52px; height: 52px;">
+                <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 32px; height: 32px;">
+                  <circle cx="50" cy="50" r="32" stroke="#E100FF" stroke-width="3" stroke-dasharray="6 6" />
+                  <rect x="35" y="35" width="30" height="30" rx="6" fill="#FFFFFF" />
+                  <circle cx="50" cy="50" r="6" fill="#4A00E0" />
+                </path></svg>
+              </div>
+              <div>
+                <span class="duration-tag">14 DAYS</span>
+                <h3 style="font-size: 13px; font-weight: 700; color: #1E293B; text-transform: uppercase; display: flex; align-items: center; gap: 4px;">
+                  DRIPCLIENT PROXY NON ROOT PANEL
+                  <span class="verified-badge" style="width: 14px; height: 14px; font-size: 8px;"><i class="fa-solid fa-check"></i></span>
+                </h3>
+                <span class="plan-qty">Qty: 14</span>
+              </div>
+            </div>
+            <div class="plan-price-block">
+              <span class="plan-price">₹500</span>
+              <span class="plan-old-price">₹700</span>
+            </div>
+          </div>
+          <button class="btn-buy-now">
+            <span>BUY NOW</span>
+            <i class="fa-solid fa-chevron-right" style="font-size: 10px;"></i>
+          </button>
+        </div>
+
+        <!-- CARD 3: 30 DAYS -->
+        <div class="plan-card">
+          <div class="plan-top-row">
+            <div style="display: flex; align-items: start; gap: 12px;">
+              <div class="service-img" style="background: linear-gradient(135deg, #8E2DE2, #4A00E0); display: flex; align-items: center; justify-content: center; border-radius: 8px; width: 52px; height: 52px;">
+                <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 32px; height: 32px;">
+                  <circle cx="50" cy="50" r="32" stroke="#E100FF" stroke-width="3" stroke-dasharray="6 6" />
+                  <rect x="35" y="35" width="30" height="30" rx="6" fill="#FFFFFF" />
+                  <circle cx="50" cy="50" r="6" fill="#4A00E0" />
+                </path></svg>
+              </div>
+              <div>
+                <span class="duration-tag">30 DAYS</span>
+                <h3 style="font-size: 13px; font-weight: 700; color: #1E293B; text-transform: uppercase; display: flex; align-items: center; gap: 4px;">
+                  DRIPCLIENT PROXY NON ROOT PANEL
+                  <span class="verified-badge" style="width: 14px; height: 14px; font-size: 8px;"><i class="fa-solid fa-check"></i></span>
+                </h3>
+                <span class="plan-qty">Qty: 30</span>
+              </div>
+            </div>
+            <div class="plan-price-block">
+              <span class="plan-price">₹800</span>
+              <span class="plan-old-price">₹1200</span>
+            </div>
+          </div>
+          <button class="btn-buy-now">
+            <span>BUY NOW</span>
+            <i class="fa-solid fa-chevron-right" style="font-size: 10px;"></i>
+          </button>
+        </div>
+
+        <!-- CARD 4: 365 DAYS -->
+        <div class="plan-card">
+          <div class="plan-top-row">
+            <div style="display: flex; align-items: start; gap: 12px;">
+              <div class="service-img" style="background: linear-gradient(135deg, #8E2DE2, #4A00E0); display: flex; align-items: center; justify-content: center; border-radius: 8px; width: 52px; height: 52px;">
+                <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 32px; height: 32px;">
+                  <circle cx="50" cy="50" r="32" stroke="#E100FF" stroke-width="3" stroke-dasharray="6 6" />
+                  <rect x="35" y="35" width="30" height="30" rx="6" fill="#FFFFFF" />
+                  <circle cx="50" cy="50" r="6" fill="#4A00E0" />
+                </path></svg>
+              </div>
+              <div>
+                <span class="duration-tag">365 DAYS</span>
+                <h3 style="font-size: 13px; font-weight: 700; color: #1E293B; text-transform: uppercase; display: flex; align-items: center; gap: 4px;">
+                  DRIPCLIENT PROXY NON ROOT PANEL
+                  <span class="verified-badge" style="width: 14px; height: 14px; font-size: 8px;"><i class="fa-solid fa-check"></i></span>
+                </h3>
+                <span class="plan-qty">Qty: 365</span>
+              </div>
+            </div>
+            <div class="plan-price-block">
+              <span class="plan-price">₹1800</span>
+              <span class="plan-old-price">₹3000</span>
+            </div>
+          </div>
+          <button class="btn-buy-now">
+            <span>BUY NOW</span>
+            <i class="fa-solid fa-chevron-right" style="font-size: 10px;"></i>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Watermark footer -->
+      <footer style="text-align: center; padding: 20px 0; margin-top: auto;">
+        <p style="font-size: 10px; color: #94A3B8; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em;">
+          © Dora Ad Admin Panel • All Rights Reserved
+        </p>
+      </footer>
+
+    </div>
+
+  </body>
+</html>

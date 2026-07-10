@@ -1,0 +1,6 @@
+{
+  "name": "Dora Ad Admin Panel",
+  "description": "Dora Ad Admin Panel 1™ - 24/7 Customer Support, WhatsApp Group/Channel, and Service Plans",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
