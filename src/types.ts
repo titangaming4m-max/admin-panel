@@ -8,6 +8,10 @@ export interface Plan {
   oldPrice: number;
   qty: number;
   status: 'Active' | 'Inactive';
+  videoUrl?: string;
+  videoFileName?: string;
+  videoFileSize?: string;
+  videoFrameRate?: string;
 }
 
 export interface Service {

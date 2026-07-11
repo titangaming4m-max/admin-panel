@@ -655,6 +655,13 @@ async function startServer() {
               </div>
             </div>
 
+            <div class="mt-6">
+              <a href="/" class="w-full inline-flex items-center justify-center gap-2 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 active:scale-95 text-slate-950 font-black text-xs uppercase tracking-widest py-3.5 px-6 rounded-xl transition-all cursor-pointer">
+                <i class="fa-solid fa-house"></i>
+                <span>Go to Home</span>
+              </a>
+            </div>
+
           </div>
 
           <script>

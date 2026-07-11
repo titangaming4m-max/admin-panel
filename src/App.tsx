@@ -11,6 +11,7 @@ import {
 import AdminConsole from './components/AdminConsole';
 import UserWallet from './components/UserWallet';
 import PaymentRedirectorOverlay from './components/PaymentRedirectorOverlay';
+import PlanVideoPlayer from './components/PlanVideoPlayer';
 
 export default function App() {
   // --- STATE LOADERS & SYSTEM SYNC ---
@@ -1728,6 +1729,15 @@ export default function App() {
                         </div>
 
                       </div>
+
+                      {plan.videoUrl && (
+                        <PlanVideoPlayer
+                          videoUrl={plan.videoUrl}
+                          videoFileSize={plan.videoFileSize}
+                          videoFileName={plan.videoFileName}
+                          videoFrameRate={plan.videoFrameRate}
+                        />
+                      )}
 
                       {/* Dynamic BUY NOW action */}
                       <button

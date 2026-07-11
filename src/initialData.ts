@@ -68,24 +68,24 @@ export const INITIAL_SERVICES: Service[] = [
 
 export const INITIAL_PLANS: Plan[] = [
   // GUILD GLORRY
-  { id: 'gg-7', serviceId: 1, name: 'GUILD GLORRY 7 DAYS', category: '7 DAYS', duration: '7 DAYS', price: 150, oldPrice: 250, qty: 7, status: 'Active' },
+  { id: 'gg-7', serviceId: 1, name: 'GUILD GLORRY 7 DAYS', category: '7 DAYS', duration: '7 DAYS', price: 150, oldPrice: 250, qty: 7, status: 'Active', videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4', videoFileName: 'guild_glorry_demo.mp4', videoFileSize: '1 GB', videoFrameRate: '30 FPS' },
   { id: 'gg-14', serviceId: 1, name: 'GUILD GLORRY 14 DAYS', category: '14 DAYS', duration: '14 DAYS', price: 280, oldPrice: 450, qty: 14, status: 'Active' },
   { id: 'gg-30', serviceId: 1, name: 'GUILD GLORRY 30 DAYS', category: '30 DAYS', duration: '30 DAYS', price: 500, oldPrice: 800, qty: 30, status: 'Active' },
   { id: 'gg-365', serviceId: 1, name: 'GUILD GLORRY 365 DAYS', category: '365 DAYS', duration: '365 DAYS', price: 1200, oldPrice: 2000, qty: 365, status: 'Active' },
   
   // DRIPCLIENT PROXY
-  { id: 'dc-7', serviceId: 2, name: 'DRIPCLIENT PROXY NON ROOT PANEL', category: '7 DAYS', duration: '7 DAYS', price: 250, oldPrice: 400, qty: 7, status: 'Active' },
+  { id: 'dc-7', serviceId: 2, name: 'DRIPCLIENT PROXY NON ROOT PANEL', category: '7 DAYS', duration: '7 DAYS', price: 250, oldPrice: 400, qty: 7, status: 'Active', videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-forest-stream-in-the-sunlight-529-large.mp4', videoFileName: 'dripclient_proxy_hq.mp4', videoFileSize: '1.5 GB', videoFrameRate: '60 FPS' },
   { id: 'dc-14', serviceId: 2, name: 'DRIPCLIENT PROXY NON ROOT PANEL', category: '14 DAYS', duration: '14 DAYS', price: 500, oldPrice: 700, qty: 14, status: 'Active' },
   { id: 'dc-30', serviceId: 2, name: 'DRIPCLIENT PROXY NON ROOT PANEL', category: '30 DAYS', duration: '30 DAYS', price: 800, oldPrice: 1200, qty: 30, status: 'Active' },
   { id: 'dc-365', serviceId: 2, name: 'DRIPCLIENT PROXY NON ROOT PANEL', category: '365 DAYS', duration: '365 DAYS', price: 1800, oldPrice: 3000, qty: 365, status: 'Active' },
 
   // PRIME HOOK
-  { id: 'ph-3', serviceId: 3, name: 'PRIME HOOK NON ROOT PANEL', category: '3 DAYS', duration: '3 DAYS', price: 150, oldPrice: 250, qty: 3, status: 'Active' },
+  { id: 'ph-3', serviceId: 3, name: 'PRIME HOOK NON ROOT PANEL', category: '3 DAYS', duration: '3 DAYS', price: 150, oldPrice: 250, qty: 3, status: 'Active', videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4', videoFileName: 'primehook_demo.mp4', videoFileSize: '1.5 GB', videoFrameRate: '60 FPS' },
   { id: 'ph-7', serviceId: 3, name: 'PRIME HOOK NON ROOT PANEL', category: '7 DAYS', duration: '7 DAYS', price: 250, oldPrice: 400, qty: 7, status: 'Active' },
   { id: 'ph-15', serviceId: 3, name: 'PRIME HOOK NON ROOT PANEL', category: '15 DAYS', duration: '15 DAYS', price: 499, oldPrice: 799, qty: 15, status: 'Active' },
 
   // HG CHEAT
-  { id: 'hg-7', serviceId: 4, name: 'HG CHEAT NON ROOT PANEL', category: '7 DAYS', duration: '7 DAYS', price: 250, oldPrice: 400, qty: 7, status: 'Active' },
+  { id: 'hg-7', serviceId: 4, name: 'HG CHEAT NON ROOT PANEL', category: '7 DAYS', duration: '7 DAYS', price: 250, oldPrice: 400, qty: 7, status: 'Active', videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4', videoFileName: 'hgcheat_intro.mp4', videoFileSize: '1 GB', videoFrameRate: '30 FPS' },
   { id: 'hg-15', serviceId: 4, name: 'HG CHEAT NON ROOT PANEL', category: '15 DAYS', duration: '15 DAYS', price: 499, oldPrice: 799, qty: 15, status: 'Active' },
   { id: 'hg-30', serviceId: 4, name: 'HG CHEAT NON ROOT PANEL', category: '30 DAYS', duration: '30 DAYS', price: 799, oldPrice: 999, qty: 30, status: 'Active' },
 
