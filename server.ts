@@ -80,7 +80,18 @@ async function startServer() {
       }
 
       // Dynamically determine the base URL of the request so that we do not pass 'localhost' in production
-      let baseUrl = process.env.APP_URL;
+      let baseUrl = "";
+      if (req.headers.referer) {
+        try {
+          const refUrl = new URL(req.headers.referer);
+          baseUrl = refUrl.origin;
+        } catch (e) {
+          baseUrl = "";
+        }
+      }
+      if (!baseUrl) {
+        baseUrl = process.env.APP_URL || "";
+      }
       if (!baseUrl || baseUrl.includes("MY_APP_URL") || baseUrl.includes("localhost")) {
         const reqHost = req.headers.host || "localhost:3000";
         const reqProtocol = req.headers["x-forwarded-proto"] || (reqHost.includes("localhost") ? "http" : "https");
@@ -125,13 +136,14 @@ async function startServer() {
       writeDB(db);
 
       const successRedirect = `${zapupiSuccessUrl}?order_id=${orderId}`;
+      const sandboxSuccessRedirect = `${zapupiSuccessUrl}?order_id=${orderId}&simulated=true`;
       const failedRedirect = `${zapupiFailedUrl}?order_id=${orderId}`;
       const cancelRedirect = `${zapupiCancelUrl}?order_id=${orderId}`;
 
       // Handle Sandbox/Test Mode redirection
       if (zapupiMode === "test" || !settings.zapupiApiKey || settings.zapupiApiKey.trim() === "") {
         // Return a mock sandbox check out URL
-        const mockCheckoutUrl = `/zapupi-sandbox-checkout?order_id=${orderId}&amount=${amount}&customer_name=${encodeURIComponent(customer_name || "Guest")}&customer_mobile=${customer_mobile || ""}&is_wallet_recharge=${is_wallet_recharge || false}&plan_id=${plan_id || ""}&service_id=${service_id || ""}&success_url=${encodeURIComponent(successRedirect)}&failure_url=${encodeURIComponent(failedRedirect)}&cancel_url=${encodeURIComponent(cancelRedirect)}`;
+        const mockCheckoutUrl = `/zapupi-sandbox-checkout?order_id=${orderId}&amount=${amount}&customer_name=${encodeURIComponent(customer_name || "Guest")}&customer_mobile=${customer_mobile || ""}&is_wallet_recharge=${is_wallet_recharge || false}&plan_id=${plan_id || ""}&service_id=${service_id || ""}&success_url=${encodeURIComponent(sandboxSuccessRedirect)}&failure_url=${encodeURIComponent(failedRedirect)}&cancel_url=${encodeURIComponent(cancelRedirect)}`;
         
         return res.json({
           status: "success",
@@ -529,6 +541,7 @@ async function startServer() {
   // -------------------------------------------------------------
   app.get("/payment/success", async (req, res) => {
     const order_id = (req.query.order_id || req.query.orderId) as string;
+    const isSimulated = req.query.simulated === "true";
     let paymentVerified = false;
 
     if (order_id) {
@@ -552,9 +565,9 @@ async function startServer() {
         if (alreadyPaid) {
           paymentVerified = true;
         } else {
-          // Check live status if live mode is active
+          // Check live status if live mode is active and it is not a simulated order
           const settings = db.settings || {};
-          if (settings.zapupiMode === "live" && settings.zapupiApiKey) {
+          if (settings.zapupiMode === "live" && settings.zapupiApiKey && !isSimulated) {
             const checkUrl = "https://pay.zapupi.com/api/order-status";
             const checkRes = await fetch(checkUrl, {
               method: "POST",
@@ -668,8 +681,9 @@ async function startServer() {
       return res.send(html);
     }
 
-    // Determine the deep links for redirecting (always defaults to /orders for service orders as specified)
-    const redirectTarget = "/orders";
+    // Determine the deep links for redirecting (select /wallet for wallet recharge requests, /orders for service plans)
+    const isWalletRecharge = order_id && (order_id.startsWith("RECH") || order_id.startsWith("rech"));
+    const redirectTarget = isWalletRecharge ? "/wallet" : "/orders";
 
     // Successful payment view
     const html = `
@@ -706,12 +720,12 @@ async function startServer() {
             Order Processed
           </h3>
           <p class="text-slate-400 text-xs mt-1">
-            Redirecting you to your orders in <span id="timer" class="text-emerald-400 font-bold">2</span> seconds...
+            Redirecting you back to the website in <span id="timer" class="text-emerald-400 font-bold">2</span> seconds...
           </p>
 
           <div class="mt-6">
             <a href="${redirectTarget}" class="inline-block bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 active:scale-95 text-white py-3 px-6 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">
-              Go to Orders Now
+              Return to Website
             </a>
           </div>
 
@@ -725,15 +739,12 @@ async function startServer() {
             if (timerEl) timerEl.innerText = countdown;
             if (countdown <= 0) {
               clearInterval(interval);
-              let targetUrl = "https://titanshop.onrender.com/orders";
-              const currentOrigin = window.location.origin;
-              if (currentOrigin.includes("localhost") || currentOrigin.includes("run.app") || currentOrigin.includes("webcontainer")) {
-                targetUrl = currentOrigin + "/orders";
-              }
+              let redirectPath = "${redirectTarget}";
+              let targetUrl = window.location.origin + redirectPath;
               try {
                 window.location.href = targetUrl;
               } catch (e) {
-                window.location.href = "https://titanshop.onrender.com/";
+                window.location.href = "https://titanshop.onrender.com" + redirectPath;
               }
             }
           }, 1000);
@@ -778,12 +789,12 @@ async function startServer() {
             Transaction Failed
           </h3>
           <p class="text-slate-400 text-xs mt-1">
-            Redirecting you to your wallet in <span id="timer" class="text-rose-400 font-bold">2</span> seconds...
+            Redirecting you back to the website in <span id="timer" class="text-rose-400 font-bold">2</span> seconds...
           </p>
 
           <div class="mt-6">
             <a href="/wallet" class="inline-block bg-slate-800 hover:bg-slate-700 text-slate-300 py-3 px-6 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">
-              Go to Wallet Now
+              Return to Website
             </a>
           </div>
 
@@ -797,15 +808,11 @@ async function startServer() {
             if (timerEl) timerEl.innerText = countdown;
             if (countdown <= 0) {
               clearInterval(interval);
-              let targetUrl = "https://titanshop.onrender.com/wallet";
-              const currentOrigin = window.location.origin;
-              if (currentOrigin.includes("localhost") || currentOrigin.includes("run.app") || currentOrigin.includes("webcontainer")) {
-                targetUrl = currentOrigin + "/wallet";
-              }
+              let targetUrl = window.location.origin + "/wallet";
               try {
                 window.location.href = targetUrl;
               } catch (e) {
-                window.location.href = "https://titanshop.onrender.com/";
+                window.location.href = "https://titanshop.onrender.com/wallet";
               }
             }
           }, 1000);
@@ -850,12 +857,12 @@ async function startServer() {
             Transaction Cancelled
           </h3>
           <p class="text-slate-400 text-xs mt-1">
-            Redirecting you to your wallet in <span id="timer" class="text-amber-400 font-bold">2</span> seconds...
+            Redirecting you back to the website in <span id="timer" class="text-amber-400 font-bold">2</span> seconds...
           </p>
 
           <div class="mt-6">
             <a href="/wallet" class="inline-block bg-slate-800 hover:bg-slate-700 text-slate-300 py-3 px-6 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">
-              Go to Wallet Now
+              Return to Website
             </a>
           </div>
 
@@ -869,15 +876,11 @@ async function startServer() {
             if (timerEl) timerEl.innerText = countdown;
             if (countdown <= 0) {
               clearInterval(interval);
-              let targetUrl = "https://titanshop.onrender.com/wallet";
-              const currentOrigin = window.location.origin;
-              if (currentOrigin.includes("localhost") || currentOrigin.includes("run.app") || currentOrigin.includes("webcontainer")) {
-                targetUrl = currentOrigin + "/wallet";
-              }
+              let targetUrl = window.location.origin + "/wallet";
               try {
                 window.location.href = targetUrl;
               } catch (e) {
-                window.location.href = "https://titanshop.onrender.com/";
+                window.location.href = "https://titanshop.onrender.com/wallet";
               }
             }
           }, 1000);
