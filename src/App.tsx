@@ -912,7 +912,14 @@ export default function App() {
       });
 
       if (!res.ok) {
-        throw new Error('Failed to initiate ZapUPI transaction');
+        let errMsg = 'Failed to initiate ZapUPI transaction';
+        try {
+          const errData = await res.json();
+          if (errData && errData.message) {
+            errMsg = `${errMsg}: ${errData.message}`;
+          }
+        } catch (_) {}
+        throw new Error(errMsg);
       }
 
       const data = await res.json();

@@ -73,7 +73,10 @@ async function startServer() {
 
       const zapupiApiKey = settings.zapupiApiKey || "test_zap_key";
       const zapupiMode = settings.zapupiMode || "test";
-      const zapupiApiEndpoint = settings.zapupiApiEndpoint || "https://api.zapupi.com/v1/create_order";
+      let zapupiApiEndpoint = settings.zapupiApiEndpoint || "https://pay.zapupi.com/api/create-order";
+      if (zapupiApiEndpoint.includes("api.zapupi.com")) {
+        zapupiApiEndpoint = "https://pay.zapupi.com/api/create-order";
+      }
       const zapupiWebhookUrl = settings.zapupiWebhookUrl || "http://localhost:3000/api/webhook/zapupi";
       const zapupiSuccessUrl = settings.zapupiSuccessUrl || "http://localhost:3000/?zapupi_status=success";
       const zapupiFailedUrl = settings.zapupiFailedUrl || "http://localhost:3000/?zapupi_status=failed";
@@ -360,7 +363,7 @@ async function startServer() {
       const settings = db.settings || {};
       if (settings.zapupiMode === "live" && settings.zapupiApiKey) {
         try {
-          const checkUrl = `https://api.zapupi.com/v1/order_status?zap_key=${settings.zapupiApiKey}&order_id=${order_id}`;
+          const checkUrl = `https://pay.zapupi.com/api/order-status?zap_key=${settings.zapupiApiKey}&order_id=${order_id}`;
           const checkRes = await fetch(checkUrl);
           if (checkRes.ok) {
             const checkData: any = await checkRes.json();
