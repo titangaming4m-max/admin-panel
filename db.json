@@ -683,7 +683,7 @@
     }
   ],
   "walletSettings": {
-    "minRecharge": 10,
+    "minRecharge": 1,
     "maxRecharge": 100000,
     "defaultQuickAmounts": [
       100,

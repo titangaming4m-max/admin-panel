@@ -97,20 +97,11 @@ async function startServer() {
         baseUrl = "https://ais-pre-2ev5jrjl54ajc6mv6fl564-1045993417263.asia-southeast1.run.app";
       }
 
-      let zapupiWebhookUrl = settings.zapupiWebhookUrl || `${baseUrl}/api/webhook/zapupi`;
-      let zapupiSuccessUrl = settings.zapupiSuccessUrl || `${baseUrl}/?zapupi_status=success`;
-      let zapupiFailedUrl = settings.zapupiFailedUrl || `${baseUrl}/?zapupi_status=failed`;
-
-      // If settings contain 'localhost' but the request/fallback is a live app domain, replace dynamically to prevent API rejection
-      if (zapupiWebhookUrl.includes("localhost")) {
-        zapupiWebhookUrl = zapupiWebhookUrl.replace(/https?:\/\/localhost(:\d+)?/g, baseUrl);
-      }
-      if (zapupiSuccessUrl.includes("localhost")) {
-        zapupiSuccessUrl = zapupiSuccessUrl.replace(/https?:\/\/localhost(:\d+)?/g, baseUrl);
-      }
-      if (zapupiFailedUrl.includes("localhost")) {
-        zapupiFailedUrl = zapupiFailedUrl.replace(/https?:\/\/localhost(:\d+)?/g, baseUrl);
-      }
+      // Ensure the redirect URLs conform strictly to the required success, failed, and cancel paths
+      const zapupiWebhookUrl = `${baseUrl}/api/payment/zapupi/webhook`;
+      const zapupiSuccessUrl = `${baseUrl}/payment/success`;
+      const zapupiFailedUrl = `${baseUrl}/payment/failed`;
+      const zapupiCancelUrl = `${baseUrl}/payment/cancel`;
 
       // Generate a unique order ID
       orderId = is_wallet_recharge === true || is_wallet_recharge === "true"
@@ -133,13 +124,14 @@ async function startServer() {
       });
       writeDB(db);
 
-      const successRedirect = `${zapupiSuccessUrl}${zapupiSuccessUrl.includes('?') ? '&' : '?'}order_id=${orderId}`;
-      const failedRedirect = `${zapupiFailedUrl}${zapupiFailedUrl.includes('?') ? '&' : '?'}order_id=${orderId}`;
+      const successRedirect = `${zapupiSuccessUrl}?order_id=${orderId}`;
+      const failedRedirect = `${zapupiFailedUrl}?order_id=${orderId}`;
+      const cancelRedirect = `${zapupiCancelUrl}?order_id=${orderId}`;
 
       // Handle Sandbox/Test Mode redirection
       if (zapupiMode === "test" || !settings.zapupiApiKey || settings.zapupiApiKey.trim() === "") {
         // Return a mock sandbox check out URL
-        const mockCheckoutUrl = `/zapupi-sandbox-checkout?order_id=${orderId}&amount=${amount}&customer_name=${encodeURIComponent(customer_name || "Guest")}&customer_mobile=${customer_mobile || ""}&is_wallet_recharge=${is_wallet_recharge || false}&plan_id=${plan_id || ""}&service_id=${service_id || ""}&success_url=${encodeURIComponent(successRedirect)}&failure_url=${encodeURIComponent(failedRedirect)}`;
+        const mockCheckoutUrl = `/zapupi-sandbox-checkout?order_id=${orderId}&amount=${amount}&customer_name=${encodeURIComponent(customer_name || "Guest")}&customer_mobile=${customer_mobile || ""}&is_wallet_recharge=${is_wallet_recharge || false}&plan_id=${plan_id || ""}&service_id=${service_id || ""}&success_url=${encodeURIComponent(successRedirect)}&failure_url=${encodeURIComponent(failedRedirect)}&cancel_url=${encodeURIComponent(cancelRedirect)}`;
         
         return res.json({
           status: "success",
@@ -157,7 +149,7 @@ async function startServer() {
         customer_mobile: customer_mobile || "",
         success_url: successRedirect,
         failed_url: failedRedirect,
-        failure_url: failedRedirect,
+        failure_url: cancelRedirect,
         timeout_url: failedRedirect,
         webhook_url: zapupiWebhookUrl
       };
@@ -223,19 +215,15 @@ async function startServer() {
         let baseUrl = process.env.APP_URL || "https://ais-pre-2ev5jrjl54ajc6mv6fl564-1045993417263.asia-southeast1.run.app";
         if (baseUrl.endsWith("/")) baseUrl = baseUrl.slice(0, -1);
         
-        let zapupiSuccessUrl = settings.zapupiSuccessUrl || `${baseUrl}/?zapupi_status=success`;
-        let zapupiFailedUrl = settings.zapupiFailedUrl || `${baseUrl}/?zapupi_status=failed`;
-        if (zapupiSuccessUrl.includes("localhost")) {
-          zapupiSuccessUrl = zapupiSuccessUrl.replace(/https?:\/\/localhost(:\d+)?/g, baseUrl);
-        }
-        if (zapupiFailedUrl.includes("localhost")) {
-          zapupiFailedUrl = zapupiFailedUrl.replace(/https?:\/\/localhost(:\d+)?/g, baseUrl);
-        }
+        const zapupiSuccessUrl = `${baseUrl}/payment/success`;
+        const zapupiFailedUrl = `${baseUrl}/payment/failed`;
+        const zapupiCancelUrl = `${baseUrl}/payment/cancel`;
         
-        const successRedirect = `${zapupiSuccessUrl}${zapupiSuccessUrl.includes('?') ? '&' : '?'}order_id=${orderId}`;
-        const failedRedirect = `${zapupiFailedUrl}${zapupiFailedUrl.includes('?') ? '&' : '?'}order_id=${orderId}`;
+        const successRedirect = `${zapupiSuccessUrl}?order_id=${orderId}`;
+        const failedRedirect = `${zapupiFailedUrl}?order_id=${orderId}`;
+        const cancelRedirect = `${zapupiCancelUrl}?order_id=${orderId}`;
         
-        const mockCheckoutUrl = `/zapupi-sandbox-checkout?order_id=${orderId}&amount=${amount}&customer_name=${encodeURIComponent(customer_name || "Guest")}&customer_mobile=${customer_mobile || ""}&is_wallet_recharge=${is_wallet_recharge || false}&plan_id=${plan_id || ""}&service_id=${service_id || ""}&success_url=${encodeURIComponent(successRedirect)}&failure_url=${encodeURIComponent(failedRedirect)}&gateway_offline=true`;
+        const mockCheckoutUrl = `/zapupi-sandbox-checkout?order_id=${orderId}&amount=${amount}&customer_name=${encodeURIComponent(customer_name || "Guest")}&customer_mobile=${customer_mobile || ""}&is_wallet_recharge=${is_wallet_recharge || false}&plan_id=${plan_id || ""}&service_id=${service_id || ""}&success_url=${encodeURIComponent(successRedirect)}&failure_url=${encodeURIComponent(failedRedirect)}&cancel_url=${encodeURIComponent(cancelRedirect)}&gateway_offline=true`;
         
         return res.json({
           status: "success",
@@ -426,7 +414,7 @@ async function startServer() {
           transactionId: finalTxnId,
           amount: amt,
           status: "Completed",
-          paymentMethod: "ZapUPI Gateway",
+          paymentMethod: "ZapUPI",
           date: dateStr
         };
         db.orders.unshift(order);
@@ -434,7 +422,7 @@ async function startServer() {
         // Update status to paid/completed
         order.status = "Completed";
         order.transactionId = finalTxnId;
-        order.paymentMethod = "ZapUPI Gateway";
+        order.paymentMethod = "ZapUPI";
       }
     }
 
@@ -454,7 +442,7 @@ async function startServer() {
   // -------------------------------------------------------------
   // 3. ZAPUPI WEBHOOK LISTENER ENDPOINT
   // -------------------------------------------------------------
-  app.post("/api/webhook/zapupi", (req, res) => {
+  app.post(["/api/webhook/zapupi", "/api/payment/zapupi/webhook"], (req, res) => {
     try {
       console.log("ZapUPI Webhook Received. Payload:", req.body);
       const result = executeWebhookFulfillment(req.body);
@@ -468,9 +456,9 @@ async function startServer() {
   // -------------------------------------------------------------
   // 4. ZAPUPI STATUS CHECK API
   // -------------------------------------------------------------
-  app.get("/api/payment/zapupi/status", async (req, res) => {
+  app.get("/api/payment/zapupi/status/:orderId?", async (req, res) => {
     try {
-      const order_id = req.query.order_id as string;
+      const order_id = (req.params.orderId || req.query.order_id) as string;
       if (!order_id) {
         return res.status(400).json({ error: "Missing order_id" });
       }
@@ -534,6 +522,370 @@ async function startServer() {
     } catch (err: any) {
       return res.status(500).json({ error: "Status check error", message: err.message });
     }
+  });
+
+  // -------------------------------------------------------------
+  // ZAPUPI CUSTOM DIRECT REDIRECTS FOR SUCCESS, FAILED, AND CANCEL
+  // -------------------------------------------------------------
+  app.get("/payment/success", async (req, res) => {
+    const order_id = (req.query.order_id || req.query.orderId) as string;
+    let paymentVerified = false;
+
+    if (order_id) {
+      try {
+        const db = readDB();
+        const isRecharge = order_id.startsWith("RECH");
+        let alreadyPaid = false;
+
+        if (isRecharge) {
+          const reqRecord = (db.rechargeRequests || []).find((r: any) => r.id === order_id);
+          if (reqRecord && reqRecord.status === "Approved") {
+            alreadyPaid = true;
+          }
+        } else {
+          const order = (db.orders || []).find((o: any) => o.id === order_id);
+          if (order && (order.status === "Completed" || order.status === "Paid")) {
+            alreadyPaid = true;
+          }
+        }
+
+        if (alreadyPaid) {
+          paymentVerified = true;
+        } else {
+          // Check live status if live mode is active
+          const settings = db.settings || {};
+          if (settings.zapupiMode === "live" && settings.zapupiApiKey) {
+            const checkUrl = "https://pay.zapupi.com/api/order-status";
+            const checkRes = await fetch(checkUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                zap_key: settings.zapupiApiKey,
+                order_id: order_id
+              })
+            });
+            if (checkRes.ok) {
+              const checkData: any = await checkRes.json();
+              const isPaidCheck = ["COMPLETED", "SUCCESS", "Paid", "active", "completed", "success", "Success"].includes(checkData.status);
+              if (isPaidCheck) {
+                const syncPayload = {
+                  order_id,
+                  status: "Success",
+                  txn_id: checkData.txn_id || checkData.transaction_id || "TXN_SYNC",
+                  amount: checkData.amount || checkData.pay_amount,
+                  customer_mobile: checkData.customer_mobile,
+                  customer_name: checkData.customer_name
+                };
+                executeWebhookFulfillment(syncPayload);
+                paymentVerified = true;
+              }
+            }
+          } else {
+            // For Sandbox / Test Mode, we auto-fulfill as completed since they successfully landed here!
+            const pendingOrder = (db.pendingZapupiOrders || []).find((o: any) => o.id === order_id);
+            const syncPayload = {
+              order_id,
+              status: "Success",
+              txn_id: "ZAPTXN" + Math.floor(10000000 + Math.random() * 90000000),
+              amount: pendingOrder ? pendingOrder.amount : 0,
+              customer_mobile: pendingOrder ? pendingOrder.customer_mobile : "",
+              customer_name: pendingOrder ? pendingOrder.customer_name : "Guest",
+              is_wallet_recharge: pendingOrder ? pendingOrder.is_wallet_recharge : undefined,
+              plan_id: pendingOrder ? pendingOrder.plan_id : "",
+              service_id: pendingOrder ? pendingOrder.service_id : ""
+            };
+            executeWebhookFulfillment(syncPayload);
+            paymentVerified = true;
+          }
+        }
+      } catch (err) {
+        console.log("Error verifying payment inside GET /payment/success:", err);
+      }
+    }
+
+    if (order_id && !paymentVerified) {
+      // Waiting for payment confirmation view (with auto status checker polling)
+      const html = `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Waiting for Payment Confirmation...</title>
+          <script src="https://cdn.tailwindcss.com"></script>
+          <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+        </head>
+        <body class="bg-[#0B132B] min-h-screen flex items-center justify-center p-4 font-sans text-slate-100">
+          <div class="bg-[#1C2541] rounded-[32px] w-full max-w-md shadow-2xl border border-slate-800 overflow-hidden p-6 text-center">
+            
+            <div class="my-6 relative flex items-center justify-center">
+              <div class="w-24 h-24 rounded-full border-4 border-slate-800 flex items-center justify-center bg-slate-900">
+                <i class="fa-solid fa-circle-notch text-teal-400 text-4xl animate-spin"></i>
+              </div>
+            </div>
+
+            <h3 class="text-white font-extrabold text-lg uppercase tracking-tight">
+              Waiting for Payment Confirmation...
+            </h3>
+            <p class="text-slate-400 text-xs mt-2">
+              We are verifying your transaction. Please do not refresh or close this page.
+            </p>
+
+            <div class="bg-slate-900/60 border border-slate-800 p-4.5 rounded-2xl w-full my-5 text-left text-xs text-slate-400">
+              <div class="flex justify-between py-1">
+                <span>Reference:</span>
+                <span class="text-slate-200 font-mono">${order_id}</span>
+              </div>
+              <div class="flex justify-between py-1 border-t border-slate-800/50 mt-1 pt-1">
+                <span>Status:</span>
+                <span class="text-amber-400 font-bold uppercase animate-pulse">Verifying...</span>
+              </div>
+            </div>
+
+          </div>
+
+          <script>
+            async function checkStatus() {
+              try {
+                const res = await fetch('/api/payment/zapupi/status/' + "${order_id}");
+                if (res.ok) {
+                  const data = await res.json();
+                  if (data.status === 'COMPLETED') {
+                    window.location.reload();
+                    return;
+                  }
+                }
+              } catch (err) {
+                console.log("Error checking status:", err);
+              }
+              setTimeout(checkStatus, 2000);
+            }
+            setTimeout(checkStatus, 1500);
+          </script>
+        </body>
+        </html>
+      `;
+      return res.send(html);
+    }
+
+    // Determine the deep links for redirecting (always defaults to /orders for service orders as specified)
+    const redirectTarget = "/orders";
+
+    // Successful payment view
+    const html = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Payment Successful</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+      </head>
+      <body class="bg-[#0B132B] min-h-screen flex items-center justify-center p-4 font-sans text-slate-100">
+        <div class="bg-[#1C2541] rounded-[32px] w-full max-w-md shadow-2xl border border-slate-800 overflow-hidden p-6 text-center relative">
+          
+          <!-- Success Toast-style header -->
+          <div class="mb-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 flex items-center gap-3 text-left">
+            <div class="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+              <i class="fa-solid fa-circle-check text-xl"></i>
+            </div>
+            <div>
+              <h4 class="text-emerald-400 font-extrabold text-sm uppercase tracking-wider">✅ Payment Successful!</h4>
+              <p class="text-slate-300 text-xs mt-0.5">Your order has been placed successfully.</p>
+            </div>
+          </div>
+
+          <div class="my-6 relative flex items-center justify-center">
+            <div class="w-24 h-24 rounded-full border-4 border-emerald-500/30 flex items-center justify-center bg-slate-900 shadow-lg shadow-emerald-500/10">
+              <i class="fa-solid fa-shield-halved text-emerald-400 text-4xl"></i>
+            </div>
+          </div>
+
+          <h3 class="text-white font-extrabold text-lg uppercase tracking-tight">
+            Order Processed
+          </h3>
+          <p class="text-slate-400 text-xs mt-1">
+            Redirecting you to your orders in <span id="timer" class="text-emerald-400 font-bold">2</span> seconds...
+          </p>
+
+          <div class="mt-6">
+            <a href="${redirectTarget}" class="inline-block bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 active:scale-95 text-white py-3 px-6 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">
+              Go to Orders Now
+            </a>
+          </div>
+
+        </div>
+
+        <script>
+          let countdown = 2;
+          const timerEl = document.getElementById('timer');
+          const interval = setInterval(() => {
+            countdown--;
+            if (timerEl) timerEl.innerText = countdown;
+            if (countdown <= 0) {
+              clearInterval(interval);
+              let targetUrl = "https://titanshop.onrender.com/orders";
+              const currentOrigin = window.location.origin;
+              if (currentOrigin.includes("localhost") || currentOrigin.includes("run.app") || currentOrigin.includes("webcontainer")) {
+                targetUrl = currentOrigin + "/orders";
+              }
+              try {
+                window.location.href = targetUrl;
+              } catch (e) {
+                window.location.href = "https://titanshop.onrender.com/";
+              }
+            }
+          }, 1000);
+        </script>
+      </body>
+      </html>
+    `;
+    res.send(html);
+  });
+
+  app.get("/payment/failed", (req, res) => {
+    const html = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Payment Failed</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+      </head>
+      <body class="bg-[#0B132B] min-h-screen flex items-center justify-center p-4 font-sans text-slate-100">
+        <div class="bg-[#1C2541] rounded-[32px] w-full max-w-md shadow-2xl border border-slate-800 overflow-hidden p-6 text-center">
+          
+          <div class="mb-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4 flex items-center gap-3 text-left">
+            <div class="w-10 h-10 rounded-full bg-rose-500/20 flex items-center justify-center text-rose-400 shrink-0">
+              <i class="fa-solid fa-circle-xmark text-xl"></i>
+            </div>
+            <div>
+              <h4 class="text-rose-400 font-extrabold text-sm uppercase tracking-wider">❌ Payment Failed</h4>
+              <p class="text-slate-300 text-xs mt-0.5">Please try again.</p>
+            </div>
+          </div>
+
+          <div class="my-6 relative flex items-center justify-center">
+            <div class="w-24 h-24 rounded-full border-4 border-rose-500/30 flex items-center justify-center bg-slate-900 shadow-lg shadow-rose-500/10">
+              <i class="fa-solid fa-triangle-exclamation text-rose-400 text-4xl"></i>
+            </div>
+          </div>
+
+          <h3 class="text-white font-extrabold text-lg uppercase tracking-tight">
+            Transaction Failed
+          </h3>
+          <p class="text-slate-400 text-xs mt-1">
+            Redirecting you to your wallet in <span id="timer" class="text-rose-400 font-bold">2</span> seconds...
+          </p>
+
+          <div class="mt-6">
+            <a href="/wallet" class="inline-block bg-slate-800 hover:bg-slate-700 text-slate-300 py-3 px-6 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">
+              Go to Wallet Now
+            </a>
+          </div>
+
+        </div>
+
+        <script>
+          let countdown = 2;
+          const timerEl = document.getElementById('timer');
+          const interval = setInterval(() => {
+            countdown--;
+            if (timerEl) timerEl.innerText = countdown;
+            if (countdown <= 0) {
+              clearInterval(interval);
+              let targetUrl = "https://titanshop.onrender.com/wallet";
+              const currentOrigin = window.location.origin;
+              if (currentOrigin.includes("localhost") || currentOrigin.includes("run.app") || currentOrigin.includes("webcontainer")) {
+                targetUrl = currentOrigin + "/wallet";
+              }
+              try {
+                window.location.href = targetUrl;
+              } catch (e) {
+                window.location.href = "https://titanshop.onrender.com/";
+              }
+            }
+          }, 1000);
+        </script>
+      </body>
+      </html>
+    `;
+    res.send(html);
+  });
+
+  app.get("/payment/cancel", (req, res) => {
+    const html = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Payment Cancelled</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+      </head>
+      <body class="bg-[#0B132B] min-h-screen flex items-center justify-center p-4 font-sans text-slate-100">
+        <div class="bg-[#1C2541] rounded-[32px] w-full max-w-md shadow-2xl border border-slate-800 overflow-hidden p-6 text-center">
+          
+          <div class="mb-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 flex items-center gap-3 text-left">
+            <div class="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
+              <i class="fa-solid fa-ban text-xl"></i>
+            </div>
+            <div>
+              <h4 class="text-amber-400 font-extrabold text-sm uppercase tracking-wider">❌ Payment Cancelled</h4>
+              <p class="text-slate-300 text-xs mt-0.5">No amount has been deducted.</p>
+            </div>
+          </div>
+
+          <div class="my-6 relative flex items-center justify-center">
+            <div class="w-24 h-24 rounded-full border-4 border-amber-500/30 flex items-center justify-center bg-slate-900 shadow-lg shadow-amber-500/10">
+              <i class="fa-solid fa-arrow-left-long text-amber-400 text-4xl animate-pulse"></i>
+            </div>
+          </div>
+
+          <h3 class="text-white font-extrabold text-lg uppercase tracking-tight">
+            Transaction Cancelled
+          </h3>
+          <p class="text-slate-400 text-xs mt-1">
+            Redirecting you to your wallet in <span id="timer" class="text-amber-400 font-bold">2</span> seconds...
+          </p>
+
+          <div class="mt-6">
+            <a href="/wallet" class="inline-block bg-slate-800 hover:bg-slate-700 text-slate-300 py-3 px-6 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">
+              Go to Wallet Now
+            </a>
+          </div>
+
+        </div>
+
+        <script>
+          let countdown = 2;
+          const timerEl = document.getElementById('timer');
+          const interval = setInterval(() => {
+            countdown--;
+            if (timerEl) timerEl.innerText = countdown;
+            if (countdown <= 0) {
+              clearInterval(interval);
+              let targetUrl = "https://titanshop.onrender.com/wallet";
+              const currentOrigin = window.location.origin;
+              if (currentOrigin.includes("localhost") || currentOrigin.includes("run.app") || currentOrigin.includes("webcontainer")) {
+                targetUrl = currentOrigin + "/wallet";
+              }
+              try {
+                window.location.href = targetUrl;
+              } catch (e) {
+                window.location.href = "https://titanshop.onrender.com/";
+              }
+            }
+          }, 1000);
+        </script>
+      </body>
+      </html>
+    `;
+    res.send(html);
   });
 
   // -------------------------------------------------------------
@@ -616,7 +968,7 @@ async function startServer() {
   // 5. PREMIUM SANDBOX CHECKOUT SIMULATOR
   // -------------------------------------------------------------
   app.get("/zapupi-sandbox-checkout", (req, res) => {
-    const { order_id, amount, customer_name, customer_mobile, is_wallet_recharge, plan_id, service_id, success_url, failure_url, gateway_offline } = req.query;
+    const { order_id, amount, customer_name, customer_mobile, is_wallet_recharge, plan_id, service_id, success_url, failure_url, cancel_url, gateway_offline } = req.query;
 
     const html = `
       <!DOCTYPE html>
@@ -692,6 +1044,14 @@ async function startServer() {
                 <i class="fa-solid fa-circle-xmark text-sm"></i>
                 <span>Simulate Failed Payment</span>
               </button>
+
+              <button
+                id="btn-cancel"
+                class="w-full bg-slate-900/60 hover:bg-slate-800 text-slate-400 py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 border border-slate-800/80"
+              >
+                <i class="fa-solid fa-arrow-left text-sm"></i>
+                <span>Cancel & Go Back</span>
+              </button>
             </div>
 
             <p class="text-[10px] text-slate-500 font-bold text-center uppercase tracking-wide leading-relaxed">
@@ -711,6 +1071,7 @@ async function startServer() {
           const service_id = "${service_id}";
           const success_url = decodeURIComponent("${encodeURIComponent((success_url as string) || '')}");
           const failure_url = decodeURIComponent("${encodeURIComponent((failure_url as string) || '')}");
+          const cancel_url = decodeURIComponent("${encodeURIComponent((cancel_url as string) || '')}");
 
           document.getElementById('btn-success').addEventListener('click', async () => {
             const btn = document.getElementById('btn-success');
@@ -747,6 +1108,10 @@ async function startServer() {
 
           document.getElementById('btn-fail').addEventListener('click', () => {
             window.location.href = failure_url;
+          });
+
+          document.getElementById('btn-cancel').addEventListener('click', () => {
+            window.location.href = cancel_url || ('/payment/cancel?order_id=' + order_id);
           });
         </script>
       </body>

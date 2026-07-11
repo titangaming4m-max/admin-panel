@@ -187,6 +187,18 @@ export default function App() {
     }
   }, []);
 
+  // Pathname router for deep link redirects
+  useEffect(() => {
+    const pathname = window.location.pathname;
+    if (pathname === '/orders') {
+      setPage('orders');
+      window.history.replaceState({}, document.title, '/');
+    } else if (pathname === '/wallet') {
+      setPage('wallet');
+      window.history.replaceState({}, document.title, '/');
+    }
+  }, []);
+
   // --- PERSISTENCE EFFECT WRITERS ---
   useEffect(() => {
     localStorage.setItem('zyro_services', JSON.stringify(services));
