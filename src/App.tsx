@@ -80,6 +80,7 @@ export default function App() {
   });
 
   // --- ZAPUPI PAYMENT & DYNAMIC SERVER SYNCS ---
+  const [isInitialized, setIsInitialized] = useState(false);
   const [zapupiPaymentResult, setZapupiPaymentResult] = useState<{ status: 'success' | 'failed'; orderId?: string } | null>(null);
 
   // Load from backend on startup
@@ -99,6 +100,7 @@ export default function App() {
           if (db.walletSettings) setWalletSettings(db.walletSettings);
           if (db.walletLogs) setWalletLogs(db.walletLogs);
           if (db.rechargeRequests) setRechargeRequests(db.rechargeRequests);
+          setIsInitialized(true);
         } else {
           // If server database is empty, seed it with the current client data
           const seed = {
@@ -118,14 +120,24 @@ export default function App() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(seed)
-          }).catch(err => console.error('Error seeding DB on startup:', err));
+          })
+          .then(() => setIsInitialized(true))
+          .catch(err => {
+            console.error('Error seeding DB on startup:', err);
+            setIsInitialized(true); // set true even if error to allow client session usage
+          });
         }
       })
-      .catch(err => console.error('Error loading DB on startup:', err));
+      .catch(err => {
+        console.error('Error loading DB on startup:', err);
+        setIsInitialized(true); // fallback to allow client offline usage
+      });
   }, []);
 
-  // Listen to state changes and push to server DB
+  // Listen to state changes and push to server DB (debounced)
   useEffect(() => {
+    if (!isInitialized) return;
+
     const syncData = {
       services,
       plans,
@@ -139,12 +151,17 @@ export default function App() {
       walletLogs,
       rechargeRequests
     };
-    fetch('/api/data', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(syncData)
-    }).catch(err => console.error('Error syncing DB to server:', err));
-  }, [services, plans, settings, orders, banners, activityLogs, wallets, walletTransactions, walletSettings, walletLogs, rechargeRequests]);
+
+    const timer = setTimeout(() => {
+      fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(syncData)
+      }).catch(err => console.error('Error syncing DB to server:', err));
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [isInitialized, services, plans, settings, orders, banners, activityLogs, wallets, walletTransactions, walletSettings, walletLogs, rechargeRequests]);
 
   // Check URL params for ZapUPI checkout outcomes
   useEffect(() => {
@@ -277,6 +294,14 @@ export default function App() {
   const [upiUtr, setUpiUtr] = useState('');
   const [upiContact, setUpiContact] = useState('');
   const [upiRemarks, setUpiRemarks] = useState('');
+  const [walletConfirmPay, setWalletConfirmPay] = useState(false);
+
+  // --- HOMEPAGE CUSTOM UPI PAYMENT FIELDS ---
+  const [homepageUpiAmount, setHomepageUpiAmount] = useState('500');
+  const [guestUpiName, setGuestUpiName] = useState('');
+  const [guestUpiMobile, setGuestUpiMobile] = useState('');
+  const [isRedirectingToHomepageZapUpi, setIsRedirectingToHomepageZapUpi] = useState(false);
+  const [showHomepageUpiForm, setShowHomepageUpiForm] = useState(false);
 
   // --- LIVE COUNTER SYSTEM ---
   const [onlineUsers, setOnlineUsers] = useState(settings.minUsers);
@@ -524,7 +549,7 @@ export default function App() {
       throw new Error('User session not found. Please log in.');
     }
 
-    const reqId = 'RECH-' + Math.floor(100000 + Math.random() * 900000);
+    const reqId = 'RECH' + Math.floor(100000 + Math.random() * 900000);
     const dateStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
 
     const newRequest: WalletRechargeRequest = {
@@ -879,6 +904,7 @@ export default function App() {
     setIsSubmittingOrder(false);
     setCheckoutSuccess(false);
     setGeneratedOrderId('');
+    setWalletConfirmPay(false);
     
     setShowPaymentModal(true);
   };
@@ -933,6 +959,78 @@ export default function App() {
       setIsRedirectingToZapUpi(false);
     }
   };
+
+  const handleHomepageUpiPay = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amountNum = parseFloat(homepageUpiAmount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      alert('Please enter a valid amount to pay.');
+      return;
+    }
+
+    if (amountNum < walletSettings.minRecharge || amountNum > walletSettings.maxRecharge) {
+      alert(`Amount must be between ₹${walletSettings.minRecharge} and ₹${walletSettings.maxRecharge}`);
+      return;
+    }
+
+    let customerName = '';
+    let customerMobile = '';
+
+    if (loggedInUser) {
+      customerName = loggedInUser.username;
+      customerMobile = loggedInUser.whatsapp;
+    } else {
+      if (!guestUpiName.trim() || !guestUpiMobile.trim()) {
+        alert('Please fill out both Name and WhatsApp Number to make the payment.');
+        return;
+      }
+      
+      const mobileTrimmed = guestUpiMobile.trim().replace(/\D/g, '');
+      if (mobileTrimmed.length !== 10) {
+        alert('WhatsApp Number must be exactly 10 digits.');
+        return;
+      }
+
+      customerName = guestUpiName.trim();
+      customerMobile = mobileTrimmed;
+    }
+
+    setIsRedirectingToHomepageZapUpi(true);
+
+    try {
+      const res = await fetch('/api/payment/zapupi/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: amountNum,
+          customer_name: customerName,
+          customer_mobile: customerMobile,
+          is_wallet_recharge: true
+        })
+      });
+
+      if (!res.ok) {
+        let errMsg = 'Failed to initiate ZapUPI transaction';
+        try {
+          const errData = await res.json();
+          if (errData && errData.message) {
+            errMsg = `${errMsg}: ${errData.message}`;
+          }
+        } catch (_) {}
+        throw new Error(errMsg);
+      }
+
+      const data = await res.json();
+      if (data.status === 'success' && data.payment_url) {
+        window.location.href = data.payment_url;
+      } else {
+        throw new Error(data.message || 'Unknown response from ZapUPI server');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Unable to connect to payment gateway. Please try again.');
+      setIsRedirectingToHomepageZapUpi(false);
+    }
+  };
  
   // Submit Order Form
   const handleClientOrderSubmit = (e: React.FormEvent) => {
@@ -982,7 +1080,7 @@ export default function App() {
     setIsSubmittingOrder(true);
  
     setTimeout(() => {
-      const ordId = `ORD-${Math.floor(10000 + Math.random() * 90000)}`;
+      const ordId = `ORD${Math.floor(10000 + Math.random() * 90000)}`;
       const newOrder: Order = {
         id: ordId,
         customerName: custName,
@@ -1300,24 +1398,131 @@ export default function App() {
                   <span>{settings.joinButtonText}</span>
                 </button>
 
-                {/* Instant QR Direct Payment */}
+                {/* Pay via UPI / QR Code Toggle Button */}
                 <button
-                  id="btn-pay-upi"
-                  onClick={() => {
-                    // Pick first active plan in list
-                    const defaultSvc = enabledServices[0] || services[0];
-                    const defaultPlan = plans.find(p => p.serviceId === defaultSvc?.id && p.status === 'Active') || plans[0];
-                    if (defaultPlan && defaultSvc) {
-                      handleBuyNow(defaultPlan, defaultSvc);
-                    } else {
-                      alert('No active pricing plans found inside database!');
-                    }
-                  }}
-                  className="bg-gradient-to-r from-[#035240] to-[#0a7a67] hover:brightness-105 active:scale-[0.98] text-white py-3.5 px-6 rounded-[18px] font-bold text-sm tracking-wide shadow-md flex items-center justify-center gap-2.5 transition-all duration-200 cursor-pointer"
+                  id="btn-pay-upi-toggle"
+                  onClick={() => setShowHomepageUpiForm(!showHomepageUpiForm)}
+                  className="bg-gradient-to-r from-[#035240] to-[#0a7a67] hover:brightness-105 active:scale-[0.98] text-white py-3.5 px-6 rounded-[18px] font-bold text-sm tracking-wide shadow-md flex items-center justify-center gap-2.5 transition-all duration-200 cursor-pointer w-full"
                 >
-                  <i className="fa-regular fa-credit-card text-sm"></i>
+                  <i className="fa-solid fa-qrcode text-sm"></i>
                   <span>{settings.upiButtonText}</span>
+                  <i className={`fa-solid fa-chevron-down text-xs transition-transform duration-200 ml-1 ${showHomepageUpiForm ? 'rotate-180' : ''}`}></i>
                 </button>
+
+                {/* Custom UPI Payment Amount Selector & Pay Widget nested inside */}
+                {showHomepageUpiForm && (
+                  <form
+                    onSubmit={handleHomepageUpiPay}
+                    className="bg-slate-50 border border-slate-200/80 p-4.5 rounded-[22px] flex flex-col gap-3 shadow-xs select-none mt-1 text-left animate-in fade-in slide-in-from-top-2 duration-200"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-50 text-[#0a7a67] flex items-center justify-center">
+                        <i className="fa-solid fa-qrcode text-sm"></i>
+                      </div>
+                      <span className="font-extrabold text-[11.5px] uppercase tracking-wider text-slate-700">
+                        Direct UPI Payment
+                      </span>
+                    </div>
+
+                    {/* Preset Amount Options */}
+                    <div className="flex flex-col gap-1">
+                      <span className="text-slate-400 font-extrabold text-[8px] uppercase tracking-widest">
+                        Select Preset Amount
+                      </span>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {[100, 250, 500, 1000].map((preset) => {
+                          const isSelected = parseFloat(homepageUpiAmount) === preset;
+                          return (
+                            <button
+                              key={preset}
+                              type="button"
+                              onClick={() => setHomepageUpiAmount(preset.toString())}
+                              className={`py-2 px-1 text-center rounded-xl font-black text-xs font-mono transition-all duration-150 cursor-pointer ${
+                                isSelected
+                                  ? 'bg-gradient-to-r from-[#035240] to-[#0a7a67] text-white shadow-xs'
+                                  : 'bg-white hover:bg-slate-50 border border-slate-200 text-slate-600'
+                              }`}
+                            >
+                              ₹{preset}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Guest Input Fields (Only visible when user is not logged in) */}
+                    {!loggedInUser && (
+                      <div className="flex flex-col gap-2 bg-white/60 p-2.5 rounded-xl border border-slate-150 mt-0.5">
+                        <span className="text-slate-400 font-extrabold text-[8px] uppercase tracking-widest">
+                          Enter Billing Details
+                        </span>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="relative">
+                            <input
+                              type="text"
+                              required
+                              placeholder="Your Name"
+                              value={guestUpiName}
+                              onChange={(e) => setGuestUpiName(e.target.value)}
+                              className="w-full bg-white border border-slate-200 rounded-lg py-2 px-2.5 text-slate-800 text-[11px] font-bold focus:outline-none focus:border-green-500"
+                            />
+                          </div>
+                          <div className="relative">
+                            <input
+                              type="tel"
+                              required
+                              maxLength={10}
+                              placeholder="WhatsApp No."
+                              value={guestUpiMobile}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/\D/g, '');
+                                setGuestUpiMobile(val);
+                              }}
+                              className="w-full bg-white border border-slate-200 rounded-lg py-2 px-2.5 text-slate-800 text-[11px] font-bold focus:outline-none focus:border-green-500 font-mono"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Custom Amount Entry and Payment Submit Button */}
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-500 font-black text-xs font-mono pointer-events-none">
+                          ₹
+                        </span>
+                        <input
+                          type="number"
+                          min={walletSettings.minRecharge}
+                          max={walletSettings.maxRecharge}
+                          required
+                          placeholder="Amount"
+                          value={homepageUpiAmount}
+                          onChange={(e) => setHomepageUpiAmount(e.target.value)}
+                          className="w-full pl-7.5 pr-2.5 bg-white border border-slate-200 rounded-xl py-2.5 text-slate-800 text-xs font-black focus:outline-none focus:border-green-500 font-mono text-left"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={isRedirectingToHomepageZapUpi}
+                        className="bg-gradient-to-r from-[#035240] to-[#0a7a67] hover:brightness-105 active:scale-[0.98] text-white py-2.5 px-5 rounded-xl font-bold text-[11px] uppercase tracking-wider shadow-sm flex items-center justify-center gap-1.5 transition-all duration-200 cursor-pointer shrink-0 disabled:opacity-75"
+                      >
+                        {isRedirectingToHomepageZapUpi ? (
+                          <>
+                            <i className="fa-solid fa-circle-notch animate-spin text-xs"></i>
+                            <span>Connecting...</span>
+                          </>
+                        ) : (
+                          <>
+                            <i className="fa-regular fa-credit-card text-xs"></i>
+                            <span>Pay Now</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                )}
 
               </div>
 
@@ -2163,18 +2368,18 @@ export default function App() {
                       <i className="fa-solid fa-chevron-right text-slate-300 group-hover:text-emerald-500 transition-colors"></i>
                     </button>
 
-                    {/* Option 2: UPI Manual Payment */}
+                    {/* Option 2: ZapUPI Auto Payment */}
                     <button
                       type="button"
                       onClick={() => setCheckoutMethod('upi')}
                       className="w-full flex items-center gap-4 p-4 rounded-2xl border border-slate-100 hover:border-[#0B1528] bg-white hover:bg-slate-50 transition-all text-left cursor-pointer group"
                     >
                       <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl shrink-0 group-hover:bg-[#0B1528] group-hover:text-white transition-colors">
-                        <i className="fa-solid fa-qrcode"></i>
+                        <i className="fa-solid fa-bolt"></i>
                       </div>
                       <div className="flex-1">
-                        <p className="text-slate-900 font-extrabold text-sm uppercase">UPI / QR Code</p>
-                        <p className="text-slate-400 font-bold text-[10px] uppercase mt-0.5">Scan QR or Copy UPI ID & Pay manually</p>
+                        <p className="text-slate-900 font-extrabold text-sm uppercase">ZapUPI Gateway</p>
+                        <p className="text-slate-400 font-bold text-[10px] uppercase mt-0.5">Pay securely using GPay, PhonePe, Paytm, or any UPI app</p>
                       </div>
                       <i className="fa-solid fa-chevron-right text-slate-300 group-hover:text-[#0B1528] transition-colors"></i>
                     </button>
@@ -2252,77 +2457,103 @@ export default function App() {
                                   </p>
                                 </div>
                               ) : hasSufficient ? (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (confirm(`Confirm purchase of "${selectedPlan.name}" for ₹${selectedPlan.price} using your Wallet Balance?`)) {
-                                      const nextBal = userWallet.balance - selectedPlan.price;
-                                      
-                                      // 1. Deduct balance from wallets list state
-                                      setWallets(prev => prev.map(w => {
-                                        if (w.whatsapp.replace(/\s+/g, '') === loggedInUser.whatsapp.replace(/\s+/g, '')) {
-                                          return {
-                                            ...w,
-                                            balance: nextBal,
-                                            totalSpent: w.totalSpent + selectedPlan.price
+                                !walletConfirmPay ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setWalletConfirmPay(true)}
+                                    className="w-full bg-[#22C55E] hover:bg-[#1fbd58] text-white py-3 px-4 rounded-xl font-black text-[11px] uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md border-0 animate-in fade-in duration-150"
+                                  >
+                                    <i className="fa-solid fa-bolt animate-pulse"></i>
+                                    <span>Pay Instantly with Wallet</span>
+                                  </button>
+                                ) : (
+                                  <div className="flex flex-col gap-2 bg-emerald-50/50 border border-emerald-200 p-3 rounded-xl animate-in zoom-in-95 duration-150">
+                                    <p className="text-slate-800 font-black text-[10px] uppercase text-center select-none">
+                                      Confirm Wallet Purchase?
+                                    </p>
+                                    <p className="text-slate-500 font-bold text-[8px] uppercase text-center leading-normal">
+                                      This will instantly deduct ₹{selectedPlan.price.toFixed(2)} from your wallet balance.
+                                    </p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const nextBal = userWallet.balance - selectedPlan.price;
+                                          
+                                          // 1. Deduct balance from wallets list state
+                                          setWallets(prev => prev.map(w => {
+                                            if (w.whatsapp.replace(/\s+/g, '') === loggedInUser.whatsapp.replace(/\s+/g, '')) {
+                                              return {
+                                                ...w,
+                                                balance: nextBal,
+                                                totalSpent: w.totalSpent + selectedPlan.price
+                                              };
+                                            }
+                                            return w;
+                                          }));
+
+                                          // 2. Generate transaction ID
+                                          const txnId = 'WTXN-' + Math.floor(100000 + Math.random() * 900000);
+                                          const dateStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+                                          // 3. Create wallet debit transaction
+                                          const newTxn: WalletTransaction = {
+                                            id: txnId,
+                                            whatsapp: loggedInUser.whatsapp,
+                                            username: loggedInUser.username,
+                                            amount: selectedPlan.price,
+                                            type: 'Debit',
+                                            paymentMethod: 'Wallet Balance',
+                                            status: 'Success',
+                                            balanceAfter: nextBal,
+                                            date: dateStr
                                           };
-                                        }
-                                        return w;
-                                      }));
+                                          setWalletTransactions(prev => [newTxn, ...prev]);
 
-                                      // 2. Generate transaction ID
-                                      const txnId = 'WTXN-' + Math.floor(100000 + Math.random() * 900000);
-                                      const dateStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
+                                          // 4. Create Order with Completed status and Wallet paymentMethod
+                                          const ordId = 'ORD' + Math.floor(10000 + Math.random() * 90000);
+                                          const newOrder: Order = {
+                                            id: ordId,
+                                            customerName: loggedInUser.username,
+                                            whatsapp: loggedInUser.whatsapp,
+                                            serviceId: paymentService.id,
+                                            planId: selectedPlan.id,
+                                            serviceName: paymentService.name,
+                                            planName: selectedPlan.name,
+                                            duration: selectedPlan.duration,
+                                            transactionId: txnId,
+                                            amount: selectedPlan.price,
+                                            status: 'Completed',
+                                            paymentMethod: 'Wallet',
+                                            date: dateStr
+                                          };
+                                          setOrders(prev => [newOrder, ...prev]);
 
-                                      // 3. Create wallet debit transaction
-                                      const newTxn: WalletTransaction = {
-                                        id: txnId,
-                                        whatsapp: loggedInUser.whatsapp,
-                                        username: loggedInUser.username,
-                                        amount: selectedPlan.price,
-                                        type: 'Debit',
-                                        paymentMethod: 'Wallet Balance',
-                                        status: 'Success',
-                                        balanceAfter: nextBal,
-                                        date: dateStr
-                                      };
-                                      setWalletTransactions(prev => [newTxn, ...prev]);
+                                          // 5. Log activity
+                                          logActivity('Wallet Purchase', `Purchased plan "${selectedPlan.name}" using wallet. Order ID: ${ordId}`);
+                                          logWalletActivity(loggedInUser.whatsapp, 'Spend', `Deducted ₹${selectedPlan.price} for plan "${selectedPlan.name}". Balance after: ₹${nextBal}`);
 
-                                      // 4. Create Order with Completed status and Wallet paymentMethod
-                                      const ordId = 'ORD-' + Math.floor(10000 + Math.random() * 90000);
-                                      const newOrder: Order = {
-                                        id: ordId,
-                                        customerName: loggedInUser.username,
-                                        whatsapp: loggedInUser.whatsapp,
-                                        serviceId: paymentService.id,
-                                        planId: selectedPlan.id,
-                                        serviceName: paymentService.name,
-                                        planName: selectedPlan.name,
-                                        duration: selectedPlan.duration,
-                                        transactionId: txnId,
-                                        amount: selectedPlan.price,
-                                        status: 'Completed',
-                                        paymentMethod: 'Wallet',
-                                        date: dateStr
-                                      };
-                                      setOrders(prev => [newOrder, ...prev]);
-
-                                      // 5. Log activity
-                                      logActivity('Wallet Purchase', `Purchased plan "${selectedPlan.name}" using wallet. Order ID: ${ordId}`);
-                                      logWalletActivity(loggedInUser.whatsapp, 'Spend', `Deducted ₹${selectedPlan.price} for plan "${selectedPlan.name}". Balance after: ₹${nextBal}`);
-
-                                      // 6. Set success screen properties
-                                      setCustName(loggedInUser.username);
-                                      setCustWhatsApp(loggedInUser.whatsapp);
-                                      setGeneratedOrderId(ordId);
-                                      setCheckoutSuccess(true);
-                                    }
-                                  }}
-                                  className="w-full bg-[#22C55E] hover:bg-[#1fbd58] text-white py-3 px-4 rounded-xl font-black text-[11px] uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md border-0"
-                                >
-                                  <i className="fa-solid fa-bolt"></i>
-                                  <span>Pay Instantly with Wallet</span>
-                                </button>
+                                          // 6. Set success screen properties
+                                          setCustName(loggedInUser.username);
+                                          setCustWhatsApp(loggedInUser.whatsapp);
+                                          setGeneratedOrderId(ordId);
+                                          setCheckoutSuccess(true);
+                                          setWalletConfirmPay(false);
+                                        }}
+                                        className="flex-1 bg-[#22C55E] hover:bg-[#1fbd58] text-white font-black text-[9px] uppercase tracking-wider py-2 rounded-lg transition-colors cursor-pointer text-center border-0 shadow-xs"
+                                      >
+                                        Yes, Confirm Pay
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setWalletConfirmPay(false)}
+                                        className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-black text-[9px] uppercase tracking-wider py-2 rounded-lg transition-colors cursor-pointer text-center border-0"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                )
                               ) : (
                                 <div className="flex flex-col gap-2 bg-rose-50/50 border border-rose-100 p-3 rounded-xl">
                                   <p className="text-rose-700 font-extrabold text-[11px] uppercase text-center select-none">

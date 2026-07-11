@@ -21,6 +21,9 @@ export default function AdminSettings({
   // Local state copy of settings
   const [localSettings, setLocalSettings] = useState<SiteSettings>({ ...settings });
   
+  // ZapUPI Connection Test state
+  const [testStatus, setTestStatus] = useState<{ status: 'idle' | 'testing' | 'success' | 'error'; message: string }>({ status: 'idle', message: '' });
+
   // Security change password fields
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -33,6 +36,33 @@ export default function AdminSettings({
       ...prev,
       [key]: value
     }));
+  };
+
+  // Test ZapUPI Gateway API credentials
+  const handleTestConnection = async () => {
+    if (!localSettings.zapupiApiKey || localSettings.zapupiApiKey.trim() === '') {
+      setTestStatus({ status: 'error', message: 'Please enter a ZapUPI API Key first.' });
+      return;
+    }
+    setTestStatus({ status: 'testing', message: 'Connecting to ZapUPI Gateway...' });
+    try {
+      const res = await fetch('/api/payment/zapupi/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ zap_key: localSettings.zapupiApiKey.trim() })
+      });
+      if (!res.ok) {
+        throw new Error(`Server responded with HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      if (data.status === 'success') {
+        setTestStatus({ status: 'success', message: data.message });
+      } else {
+        setTestStatus({ status: 'error', message: data.message || 'API verification failed.' });
+      }
+    } catch (err: any) {
+      setTestStatus({ status: 'error', message: err.message || 'API connection failed.' });
+    }
   };
 
   // Submit Settings
@@ -383,7 +413,7 @@ export default function AdminSettings({
                 <label className="text-slate-400 font-bold text-[9px] uppercase tracking-wider">API Endpoint</label>
                 <input
                   type="text"
-                  value={localSettings.zapupiApiEndpoint ?? 'https://api.zapupi.com/v1/create_order'}
+                  value={localSettings.zapupiApiEndpoint ?? 'https://pay.zapupi.com/api/create-order'}
                   onChange={(e) => handleFieldChange('zapupiApiEndpoint', e.target.value)}
                   className="bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 font-semibold focus:outline-none focus:bg-white"
                 />
@@ -421,6 +451,57 @@ export default function AdminSettings({
                   placeholder="https://your-domain.com/?zapupi_status=failed"
                   className="bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 font-semibold focus:outline-none focus:bg-white"
                 />
+              </div>
+            </div>
+
+            {/* Test Connection Actions */}
+            <div className="border-t border-slate-50 pt-4 mt-1 flex flex-col gap-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 font-bold text-[9px] uppercase tracking-wider">API Verification</span>
+                <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md ${
+                  localSettings.zapupiApiKey ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+                }`}>
+                  {localSettings.zapupiApiKey ? 'API Key Set' : 'Missing API Key'}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  disabled={testStatus.status === 'testing'}
+                  className="bg-[#0B1528] hover:bg-[#1C2D4B] disabled:bg-slate-300 text-white font-black text-[9.5px] uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all cursor-pointer border-0 shrink-0"
+                >
+                  {testStatus.status === 'testing' ? (
+                    <>
+                      <i className="fa-solid fa-spinner animate-spin mr-1.5"></i>
+                      Testing...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fa-solid fa-vial mr-1.5"></i>
+                      Test API Connection
+                    </>
+                  )}
+                </button>
+                
+                {testStatus.status !== 'idle' && (
+                  <div className={`flex-1 text-[10px] font-bold px-3 py-2 rounded-xl border flex items-center gap-1.5 ${
+                    testStatus.status === 'success' 
+                      ? 'bg-emerald-50/50 border-emerald-100 text-emerald-700' 
+                      : testStatus.status === 'error'
+                        ? 'bg-rose-50/50 border-rose-100 text-rose-700'
+                        : 'bg-slate-50 border-slate-100 text-slate-600'
+                  }`}>
+                    <i className={`fa-solid text-[9px] shrink-0 ${
+                      testStatus.status === 'success' 
+                        ? 'fa-circle-check text-emerald-500' 
+                        : testStatus.status === 'error'
+                          ? 'fa-circle-exclamation text-rose-500'
+                          : 'fa-spinner animate-spin text-slate-400'
+                    }`}></i>
+                    <span className="truncate leading-none">{testStatus.message}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>

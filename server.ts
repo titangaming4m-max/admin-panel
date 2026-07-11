@@ -77,14 +77,60 @@ async function startServer() {
       if (zapupiApiEndpoint.includes("api.zapupi.com")) {
         zapupiApiEndpoint = "https://pay.zapupi.com/api/create-order";
       }
-      const zapupiWebhookUrl = settings.zapupiWebhookUrl || "http://localhost:3000/api/webhook/zapupi";
-      const zapupiSuccessUrl = settings.zapupiSuccessUrl || "http://localhost:3000/?zapupi_status=success";
-      const zapupiFailedUrl = settings.zapupiFailedUrl || "http://localhost:3000/?zapupi_status=failed";
+
+      // Dynamically determine the base URL of the request so that we do not pass 'localhost' in production
+      let baseUrl = process.env.APP_URL;
+      if (!baseUrl || baseUrl.includes("MY_APP_URL") || baseUrl.includes("localhost")) {
+        const reqHost = req.headers.host || "localhost:3000";
+        const reqProtocol = req.headers["x-forwarded-proto"] || (reqHost.includes("localhost") ? "http" : "https");
+        baseUrl = `${reqProtocol}://${reqHost}`;
+      }
+
+      // Ensure no trailing slash for consistency
+      if (baseUrl.endsWith("/")) {
+        baseUrl = baseUrl.slice(0, -1);
+      }
+
+      // Fallback to the live pre-production domain if it is still localhost (to pass external API validations which reject localhost)
+      if (baseUrl.includes("localhost")) {
+        baseUrl = "https://ais-pre-2ev5jrjl54ajc6mv6fl564-1045993417263.asia-southeast1.run.app";
+      }
+
+      let zapupiWebhookUrl = settings.zapupiWebhookUrl || `${baseUrl}/api/webhook/zapupi`;
+      let zapupiSuccessUrl = settings.zapupiSuccessUrl || `${baseUrl}/?zapupi_status=success`;
+      let zapupiFailedUrl = settings.zapupiFailedUrl || `${baseUrl}/?zapupi_status=failed`;
+
+      // If settings contain 'localhost' but the request/fallback is a live app domain, replace dynamically to prevent API rejection
+      if (zapupiWebhookUrl.includes("localhost")) {
+        zapupiWebhookUrl = zapupiWebhookUrl.replace(/https?:\/\/localhost(:\d+)?/g, baseUrl);
+      }
+      if (zapupiSuccessUrl.includes("localhost")) {
+        zapupiSuccessUrl = zapupiSuccessUrl.replace(/https?:\/\/localhost(:\d+)?/g, baseUrl);
+      }
+      if (zapupiFailedUrl.includes("localhost")) {
+        zapupiFailedUrl = zapupiFailedUrl.replace(/https?:\/\/localhost(:\d+)?/g, baseUrl);
+      }
 
       // Generate a unique order ID
       const orderId = is_wallet_recharge === true || is_wallet_recharge === "true"
-        ? "RECH-" + Math.floor(100000 + Math.random() * 900000)
-        : "ORD-" + Math.floor(10000 + Math.random() * 90000);
+        ? "RECH" + Math.floor(100000 + Math.random() * 900000)
+        : "ORD" + Math.floor(10000 + Math.random() * 90000);
+
+      // Save order details to pendingZapupiOrders array in database for webhook lookup
+      if (!db.pendingZapupiOrders) {
+        db.pendingZapupiOrders = [];
+      }
+      db.pendingZapupiOrders.push({
+        id: orderId,
+        amount,
+        customer_name: customer_name || "Guest",
+        customer_mobile: customer_mobile || "",
+        is_wallet_recharge,
+        plan_id,
+        service_id,
+        createdAt: new Date().toISOString()
+      });
+      writeDB(db);
 
       const successRedirect = `${zapupiSuccessUrl}${zapupiSuccessUrl.includes('?') ? '&' : '?'}order_id=${orderId}`;
       const failedRedirect = `${zapupiFailedUrl}${zapupiFailedUrl.includes('?') ? '&' : '?'}order_id=${orderId}`;
@@ -109,7 +155,9 @@ async function startServer() {
         customer_name: customer_name || "Guest",
         customer_mobile: customer_mobile || "",
         success_url: successRedirect,
+        failed_url: failedRedirect,
         failure_url: failedRedirect,
+        timeout_url: failedRedirect,
         webhook_url: zapupiWebhookUrl
       };
 
@@ -159,6 +207,7 @@ async function startServer() {
       const {
         order_id,
         status,
+        txn_id,
         transaction_id,
         amount,
         is_wallet_recharge,
@@ -175,20 +224,39 @@ async function startServer() {
       const db = readDB();
       const dateStr = new Date().toISOString().replace("T", " ").substring(0, 19);
 
-      // Verify webhook authenticity (e.g. status completed/success)
-      const isPaid = ["COMPLETED", "SUCCESS", "Paid", "active", "completed", "success"].includes(status);
+      // Lookup pending order details in db.pendingZapupiOrders if present
+      const pendingOrder = (db.pendingZapupiOrders || []).find((o: any) => o.id === order_id);
+
+      const finalStatus = status || req.body.status;
+      const isPaid = ["COMPLETED", "SUCCESS", "Paid", "active", "completed", "success", "Success"].includes(finalStatus);
 
       if (!isPaid) {
-        console.log(`Webhook reported non-paid status "${status}" for order ${order_id}. Skipping.`);
+        console.log(`Webhook reported non-paid status "${finalStatus}" for order ${order_id}. Skipping.`);
         return res.json({ status: "ignored", message: "Non-paid status" });
       }
 
-      const isRecharge = order_id.startsWith("RECH-") || is_wallet_recharge === true || is_wallet_recharge === "true";
+      const finalIsWalletRecharge = is_wallet_recharge !== undefined ? is_wallet_recharge : (pendingOrder ? pendingOrder.is_wallet_recharge : undefined);
+      const finalCustomerMobile = customer_mobile || (pendingOrder ? pendingOrder.customer_mobile : "");
+      const finalCustomerName = customer_name || (pendingOrder ? pendingOrder.customer_name : "Guest");
+      const finalPlanId = plan_id || (pendingOrder ? pendingOrder.plan_id : "");
+      const finalServiceId = service_id || (pendingOrder ? pendingOrder.service_id : "");
+      const finalAmount = amount !== undefined ? amount : (pendingOrder ? pendingOrder.amount : 0);
+
+      const isRecharge = order_id.startsWith("RECH") || finalIsWalletRecharge === true || finalIsWalletRecharge === "true";
+      const finalTxnId = txn_id || transaction_id || "WTXN-" + Math.floor(100000 + Math.random() * 900000);
 
       if (isRecharge) {
         // WALLET RECHARGE WEBHOOK FULFILLMENT
-        const mobile = (customer_mobile || "").replace(/\s+/g, "");
-        const amt = parseFloat(amount) || 0;
+        const mobile = (finalCustomerMobile || "").replace(/\s+/g, "");
+        const amt = parseFloat(finalAmount) || 0;
+
+        // Check if recharge request was already approved to prevent duplicate credits
+        if (!db.rechargeRequests) db.rechargeRequests = [];
+        const existingReq = db.rechargeRequests.find((r: any) => r.id === order_id);
+        if (existingReq && existingReq.status === "Approved") {
+          console.log(`Recharge request ${order_id} is already approved. Avoiding duplicate credit.`);
+          return res.json({ status: "success", message: "Already processed" });
+        }
 
         // 1. Locate or create wallet
         if (!db.wallets) db.wallets = [];
@@ -197,7 +265,7 @@ async function startServer() {
         if (!wallet) {
           wallet = {
             whatsapp: mobile || "918015342606",
-            username: customer_name || "Guest User",
+            username: finalCustomerName || "Guest User",
             balance: 0,
             totalAdded: 0,
             totalSpent: 0,
@@ -215,11 +283,10 @@ async function startServer() {
 
         // 2. Write Wallet Transaction
         if (!db.walletTransactions) db.walletTransactions = [];
-        const txnId = transaction_id || "WTXN-" + Math.floor(100000 + Math.random() * 900000);
         db.walletTransactions.unshift({
-          id: txnId,
+          id: finalTxnId,
           whatsapp: mobile,
-          username: customer_name || wallet.username,
+          username: finalCustomerName || wallet.username,
           amount: amt,
           type: "Credit",
           paymentMethod: "ZapUPI Gateway",
@@ -235,9 +302,9 @@ async function startServer() {
           reqRecord = {
             id: order_id,
             userId: mobile,
-            username: customer_name || wallet.username,
+            username: finalCustomerName || wallet.username,
             rechargeAmount: amt,
-            utrNumber: txnId,
+            utrNumber: finalTxnId,
             contactMobile: mobile,
             paymentMethod: "ZapUPI Gateway",
             status: "Approved",
@@ -269,9 +336,15 @@ async function startServer() {
         if (!db.orders) db.orders = [];
         let order = db.orders.find((o: any) => o.id === order_id);
 
-        const amt = parseFloat(amount) || 0;
-        const planId = plan_id || "";
-        const servId = parseInt(service_id) || 0;
+        // Check if order is already completed or paid to prevent duplicate processing
+        if (order && (order.status === "Completed" || order.status === "Paid")) {
+          console.log(`Order ${order_id} is already completed/paid. Avoiding duplicate fulfillment.`);
+          return res.json({ status: "success", message: "Already processed" });
+        }
+
+        const amt = parseFloat(finalAmount) || 0;
+        const planId = finalPlanId || "";
+        const servId = parseInt(finalServiceId) || 0;
 
         // Retrieve service/plan names if missing
         let serviceName = "Service";
@@ -294,14 +367,14 @@ async function startServer() {
           // Create new paid Order
           order = {
             id: order_id,
-            customerName: customer_name || "Guest",
-            whatsapp: customer_mobile || "",
+            customerName: finalCustomerName || "Guest",
+            whatsapp: finalCustomerMobile || "",
             serviceId: servId,
             planId: planId,
             serviceName: serviceName,
             planName: planName,
             duration: duration,
-            transactionId: transaction_id || "TXN" + Math.floor(Math.random() * 1000000),
+            transactionId: finalTxnId,
             amount: amt,
             status: "Completed",
             paymentMethod: "ZapUPI Gateway",
@@ -311,7 +384,7 @@ async function startServer() {
         } else {
           // Update status to paid/completed
           order.status = "Completed";
-          order.transactionId = transaction_id || order.transactionId;
+          order.transactionId = finalTxnId;
           order.paymentMethod = "ZapUPI Gateway";
         }
       }
@@ -345,7 +418,7 @@ async function startServer() {
       }
 
       const db = readDB();
-      const isRecharge = order_id.startsWith("RECH-");
+      const isRecharge = order_id.startsWith("RECH");
 
       if (isRecharge) {
         const reqRecord = (db.rechargeRequests || []).find((r: any) => r.id === order_id);
@@ -363,22 +436,28 @@ async function startServer() {
       const settings = db.settings || {};
       if (settings.zapupiMode === "live" && settings.zapupiApiKey) {
         try {
-          const checkUrl = `https://pay.zapupi.com/api/order-status?zap_key=${settings.zapupiApiKey}&order_id=${order_id}`;
-          const checkRes = await fetch(checkUrl);
+          const checkUrl = "https://pay.zapupi.com/api/order-status";
+          const checkRes = await fetch(checkUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              zap_key: settings.zapupiApiKey,
+              order_id: order_id
+            })
+          });
           if (checkRes.ok) {
             const checkData: any = await checkRes.json();
             console.log("ZapUPI Order Status Check:", checkData);
-            if (["COMPLETED", "SUCCESS", "Paid"].includes(checkData.status)) {
+            const isPaidCheck = ["COMPLETED", "SUCCESS", "Paid", "active", "completed", "success", "Success"].includes(checkData.status);
+            if (isPaidCheck) {
               // Trigger webhook logic internally to sync
               const syncPayload = {
                 order_id,
-                status: "COMPLETED",
-                transaction_id: checkData.transaction_id || "TXN_SYNC",
-                amount: checkData.amount,
+                status: "Success",
+                txn_id: checkData.txn_id || checkData.transaction_id || "TXN_SYNC",
+                amount: checkData.amount || checkData.pay_amount,
                 customer_mobile: checkData.customer_mobile,
-                customer_name: checkData.customer_name,
-                plan_id: checkData.plan_id,
-                service_id: checkData.service_id
+                customer_name: checkData.customer_name
               };
 
               // Make webhook call locally to trigger full DB credit/subscription flow
@@ -400,6 +479,52 @@ async function startServer() {
 
     } catch (err: any) {
       return res.status(500).json({ error: "Status check error", message: err.message });
+    }
+  });
+
+  // -------------------------------------------------------------
+  // ZAPUPI TEST CONNECTION API
+  // -------------------------------------------------------------
+  app.post("/api/payment/zapupi/test-connection", async (req, res) => {
+    try {
+      const { zap_key } = req.body;
+      if (!zap_key) {
+        return res.status(400).json({ error: "Missing API Key" });
+      }
+
+      const checkUrl = "https://pay.zapupi.com/api/order-status";
+      const checkRes = await fetch(checkUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          zap_key: zap_key,
+          order_id: "test-connection-check"
+        })
+      });
+
+      if (!checkRes.ok) {
+        return res.json({
+          status: "error",
+          message: `Server responded with HTTP status ${checkRes.status}`
+        });
+      }
+
+      const result: any = await checkRes.json();
+      if (result && result.message === "Invalid Zap Key") {
+        return res.json({
+          status: "error",
+          message: "Invalid Zap Key (Unauthorized)"
+        });
+      }
+
+      // If we got here, it indicates that the Zap Key is valid since it wasn't rejected as "Invalid Zap Key".
+      return res.json({
+        status: "success",
+        message: "API Connection Successful! Zap Key is valid."
+      });
+
+    } catch (err: any) {
+      return res.json({ status: "error", message: `Connection failed: ${err.message}` });
     }
   });
 
