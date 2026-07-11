@@ -11,6 +11,7 @@ interface UserWalletProps {
   onSubmitRechargeRequest?: (amount: number, utrNumber: string, contactMobile: string, remarks: string, paymentMethod: string, screenshot?: string) => string;
   onAddTransaction: (amount: number, type: 'Credit' | 'Debit', method: string, status: 'Success' | 'Pending' | 'Failed') => void;
   onRedirectToLogin: () => void;
+  onPaymentRedirect?: (data: { url: string; amount: number; customerName: string; customerMobile: string; orderId?: string }) => void;
 }
 
 export default function UserWallet({
@@ -23,6 +24,7 @@ export default function UserWallet({
   onSubmitRechargeRequest,
   onAddTransaction,
   onRedirectToLogin,
+  onPaymentRedirect,
 }: UserWalletProps) {
   const [isAddMoneyOpen, setIsAddMoneyOpen] = useState(false);
   const [addAmount, setAddAmount] = useState<string>('500');
@@ -86,7 +88,18 @@ export default function UserWallet({
 
       const data = await res.json();
       if (data.status === 'success' && data.payment_url) {
-        window.location.href = data.payment_url;
+        if (onPaymentRedirect) {
+          onPaymentRedirect({
+            url: data.payment_url,
+            amount: amountNum,
+            customerName: loggedInUser.username,
+            customerMobile: loggedInUser.whatsapp,
+            orderId: data.order_id || undefined
+          });
+          setIsRedirectingToZapUpi(false);
+        } else {
+          window.location.href = data.payment_url;
+        }
       } else {
         throw new Error(data.message || 'Unknown response from ZapUPI server');
       }

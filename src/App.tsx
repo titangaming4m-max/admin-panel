@@ -10,6 +10,7 @@ import {
 } from './initialData';
 import AdminConsole from './components/AdminConsole';
 import UserWallet from './components/UserWallet';
+import PaymentRedirectorOverlay from './components/PaymentRedirectorOverlay';
 
 export default function App() {
   // --- STATE LOADERS & SYSTEM SYNC ---
@@ -82,6 +83,13 @@ export default function App() {
   // --- ZAPUPI PAYMENT & DYNAMIC SERVER SYNCS ---
   const [isInitialized, setIsInitialized] = useState(false);
   const [zapupiPaymentResult, setZapupiPaymentResult] = useState<{ status: 'success' | 'failed'; orderId?: string } | null>(null);
+  const [paymentRedirector, setPaymentRedirector] = useState<{
+    url: string;
+    amount: number;
+    customerName: string;
+    customerMobile: string;
+    orderId?: string;
+  } | null>(null);
 
   // Load from backend on startup
   useEffect(() => {
@@ -950,7 +958,14 @@ export default function App() {
 
       const data = await res.json();
       if (data.status === 'success' && data.payment_url) {
-        window.location.href = data.payment_url;
+        setPaymentRedirector({
+          url: data.payment_url,
+          amount: selectedPlan.price,
+          customerName: custName,
+          customerMobile: custWhatsApp,
+          orderId: data.order_id || undefined
+        });
+        setIsRedirectingToZapUpi(false);
       } else {
         throw new Error(data.message || 'Unknown response from ZapUPI server');
       }
@@ -1022,7 +1037,14 @@ export default function App() {
 
       const data = await res.json();
       if (data.status === 'success' && data.payment_url) {
-        window.location.href = data.payment_url;
+        setPaymentRedirector({
+          url: data.payment_url,
+          amount: amountNum,
+          customerName: customerName,
+          customerMobile: customerMobile,
+          orderId: data.order_id || undefined
+        });
+        setIsRedirectingToHomepageZapUpi(false);
       } else {
         throw new Error(data.message || 'Unknown response from ZapUPI server');
       }
@@ -2149,6 +2171,7 @@ export default function App() {
                   setAuthMode('login');
                   setPage('profile');
                 }}
+                onPaymentRedirect={(data) => setPaymentRedirector(data)}
               />
             </main>
           </div>
@@ -2847,6 +2870,20 @@ export default function App() {
 
           </div>
         </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* ZAPUPI SECURE PAYMENT REDIRECTOR OVERLAY                      */}
+      {/* ------------------------------------------------------------- */}
+      {paymentRedirector && (
+        <PaymentRedirectorOverlay
+          url={paymentRedirector.url}
+          amount={paymentRedirector.amount}
+          customerName={paymentRedirector.customerName}
+          customerMobile={paymentRedirector.customerMobile}
+          orderId={paymentRedirector.orderId}
+          onCancel={() => setPaymentRedirector(null)}
+        />
       )}
 
       {/* ------------------------------------------------------------- */}
