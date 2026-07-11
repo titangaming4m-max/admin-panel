@@ -44,6 +44,50 @@ export default function UserWallet({
   const [remarks, setRemarks] = useState('');
   const [screenshot, setScreenshot] = useState('');
   const [isSubmittingRecharge, setIsSubmittingRecharge] = useState(false);
+  const [isRedirectingToZapUpi, setIsRedirectingToZapUpi] = useState(false);
+
+  const handleRechargeViaZapUpi = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amountNum = parseFloat(addAmount);
+    if (isNaN(amountNum) || amountNum < walletSettings.minRecharge || amountNum > walletSettings.maxRecharge) {
+      alert(`Recharge amount must be between ₹${walletSettings.minRecharge} and ₹${walletSettings.maxRecharge}`);
+      return;
+    }
+
+    if (wallet?.status === 'Frozen') {
+      alert('Your wallet is frozen by Admin. You cannot add money.');
+      return;
+    }
+
+    setIsRedirectingToZapUpi(true);
+
+    try {
+      const res = await fetch('/api/payment/zapupi/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: amountNum,
+          customer_name: loggedInUser.username,
+          customer_mobile: loggedInUser.whatsapp,
+          is_wallet_recharge: true
+        })
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to initiate ZapUPI transaction');
+      }
+
+      const data = await res.json();
+      if (data.status === 'success' && data.payment_url) {
+        window.location.href = data.payment_url;
+      } else {
+        throw new Error(data.message || 'Unknown response from ZapUPI server');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Unable to connect to payment gateway. Please try again.');
+      setIsRedirectingToZapUpi(false);
+    }
+  };
   
   // User Recharge History tab & list states
   const [rechargeActiveTab, setRechargeActiveTab] = useState<'statement' | 'requests'>('statement');
@@ -670,7 +714,7 @@ export default function UserWallet({
           </div>
 
           {paymentStep === 'details' ? (
-            <form onSubmit={handleConfirmPayment} className="flex flex-col gap-4 text-left">
+            <form onSubmit={handleRechargeViaZapUpi} className="flex flex-col gap-4 text-left">
               
               {/* Enter Amount input */}
               <div className="flex flex-col gap-1.5 text-left">
@@ -716,176 +760,43 @@ export default function UserWallet({
                 </div>
               </div>
 
-              {/* Gateway details and QR Display */}
-              <div className="bg-emerald-50/50 border border-emerald-100/70 rounded-2xl p-4 flex flex-col gap-3">
-                <div className="flex items-center gap-2 border-b border-emerald-100/50 pb-2">
-                  <span className="w-2 h-2 rounded-full bg-[#22C55E]"></span>
-                  <h6 className="text-slate-800 font-black text-[9px] uppercase tracking-wider">
-                    Official UPI Gateway
+              {/* ZapUPI auto gateway details */}
+              <div className="bg-[#0B1528] text-white rounded-2xl p-4 flex flex-col gap-3 relative overflow-hidden select-none">
+                <div className="absolute right-4 top-4 text-emerald-400 font-extrabold text-[8px] uppercase tracking-wider">
+                  Auto Gateway
+                </div>
+                <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <h6 className="text-[#a0aec0] font-black text-[9px] uppercase tracking-wider">
+                    ZapUPI Auto Payment Gateway
                   </h6>
                 </div>
-
-                <div className="flex flex-col items-center gap-2 select-none">
-                  <p className="text-slate-500 font-extrabold text-[9px] tracking-wide uppercase text-center max-w-[220px]">
-                    Scan QR Code to pay ₹{addAmount || '0'}
-                  </p>
-                  
-                  <div className="w-28 h-28 bg-white border border-emerald-100 p-1.5 rounded-2xl flex items-center justify-center relative shadow-xs overflow-hidden">
-                    {siteSettings.qrImageUrl ? (
-                      <img
-                        src={siteSettings.qrImageUrl}
-                        alt="Gateway QR"
-                        className="w-full h-full object-contain"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <div className="text-slate-400 text-[8px] font-bold uppercase text-center">No QR Code Defined</div>
-                    )}
-                  </div>
-                </div>
-
-                {siteSettings.upiId && (
-                  <div className="flex flex-col gap-1 text-center border-t border-emerald-100/40 pt-2 select-none">
-                    <span className="text-slate-400 font-bold text-[8px] uppercase tracking-wider">Payee UPI ID</span>
-                    <div className="flex items-center gap-2 bg-white/70 p-1.5 rounded-xl border border-slate-200 mt-1">
-                      <span className="text-slate-700 font-extrabold text-[10px] select-all flex-1 text-center font-mono">
-                        {siteSettings.upiId}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleCopyUpi}
-                        className="bg-slate-900 hover:bg-slate-800 text-white px-2 py-1 rounded-md text-[8px] font-black uppercase cursor-pointer"
-                      >
-                        {copiedUpi ? 'Copied' : 'Copy'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* PAYMENT INSTRUCTIONS */}
-              <div className="bg-slate-50 border border-slate-100 p-3.5 rounded-xl text-left">
-                <span className="text-slate-500 font-bold text-[8.5px] uppercase tracking-wider block mb-1">Payment Instructions</span>
-                <ol className="list-decimal list-inside text-slate-500 text-[10.5px] leading-relaxed flex flex-col gap-1 font-semibold">
-                  <li>Scan the above QR Code or Copy the Payee UPI ID.</li>
-                  <li>Open GPay, PhonePe, Paytm or any other payment app.</li>
-                  <li>Pay the exact Recharge Amount.</li>
-                  <li>Copy your payment's 12-digit UTR Number.</li>
-                  <li>Fill the verification form below and submit.</li>
-                </ol>
-              </div>
-
-              {/* MANUAL PAYMENT VERIFICATION FORM */}
-              <div className="border-t border-slate-200/80 pt-4 flex flex-col gap-3.5">
-                <div className="flex items-center gap-2">
-                  <div className="w-1 h-3.5 bg-green-500 rounded-full"></div>
-                  <h5 className="text-slate-800 font-black text-[10px] uppercase tracking-wider">Payment Verification Form</h5>
-                </div>
-
-                {/* 1. UTR Number */}
-                <div className="flex flex-col gap-1.5 text-left">
-                  <label className="text-slate-500 font-bold text-[9px] uppercase tracking-wider flex justify-between items-center">
-                    <span>UTR / Transaction ID *</span>
-                    <span className="text-[8px] text-slate-400 lowercase tracking-normal">12 to 30 characters</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    maxLength={30}
-                    value={utrNumber}
-                    onChange={(e) => setUtrNumber(e.target.value)}
-                    placeholder="Enter 12-digit UPI Ref/UTR No."
-                    className="w-full bg-[#F8FAFC] border border-slate-200 rounded-xl py-3 px-3.5 text-slate-800 text-xs font-bold font-mono focus:outline-none focus:border-green-500 text-left"
-                  />
-                </div>
-
-                {/* 2. Contact Mobile Number */}
-                <div className="flex flex-col gap-1.5 text-left">
-                  <label className="text-slate-500 font-bold text-[9px] uppercase tracking-wider">
-                    Contact Mobile Number *
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    maxLength={10}
-                    value={contactMobile}
-                    onChange={(e) => setContactMobile(e.target.value.replace(/\D/g, ''))}
-                    placeholder="Enter 10-digit mobile number"
-                    className="w-full bg-[#F8FAFC] border border-slate-200 rounded-xl py-3 px-3.5 text-slate-800 text-xs font-bold font-mono focus:outline-none focus:border-green-500 text-left"
-                  />
-                </div>
-
-                {/* 3. Optional Remarks */}
-                <div className="flex flex-col gap-1.5 text-left">
-                  <label className="text-slate-500 font-bold text-[9px] uppercase tracking-wider">
-                    Optional Remarks
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={remarks}
-                    onChange={(e) => setRemarks(e.target.value)}
-                    placeholder="Enter any payment notes (Optional)"
-                    className="w-full bg-[#F8FAFC] border border-slate-200 rounded-xl py-2.5 px-3.5 text-slate-800 text-xs font-semibold focus:outline-none focus:border-green-500"
-                  />
-                </div>
-
-                {/* 4. Screenshot Upload Field (Optional but extremely high-fidelity) */}
-                <div className="flex flex-col gap-1.5 text-left">
-                  <label className="text-slate-500 font-bold text-[9px] uppercase tracking-wider">
-                    Upload Payment Screenshot Proof (Optional)
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <label className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer border border-slate-200 transition-colors flex items-center gap-1.5">
-                      <i className="fa-solid fa-cloud-arrow-up"></i>
-                      <span>Choose File</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleScreenshotChange}
-                        className="hidden"
-                      />
-                    </label>
-                    {screenshot ? (
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded border border-emerald-200 overflow-hidden bg-emerald-50">
-                          <img src={screenshot} alt="Preview" className="w-full h-full object-contain" />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setScreenshot('')}
-                          className="text-rose-500 hover:text-rose-600 text-[10px] font-black uppercase"
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-[10px] text-slate-400 font-bold uppercase">No screenshot chosen</span>
-                    )}
-                  </div>
-                </div>
+                <p className="text-[#a0aec0] text-[10.5px] font-semibold leading-relaxed text-left">
+                  Top-up your wallet instantly using your UPI app (PhonePe, GPay, Paytm, BHIM, etc.). No manual UTR entry or screenshot verification needed! Your balance will be credited automatically.
+                </p>
               </div>
 
               {/* Payment Summary */}
-              <div className="flex justify-between items-center bg-[#FAFDFB] p-4 rounded-xl border border-emerald-50 select-none text-xs font-bold text-slate-700 mt-2">
+              <div className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-200 select-none text-xs font-bold text-slate-700 mt-2">
                 <span className="uppercase">Recharge Amount:</span>
                 <span className="text-[#22c55e] font-black text-lg">₹{addAmount || '0'}</span>
               </div>
 
-              {/* PREMIUM "PAY NOW" ACTION BUTTON */}
+              {/* PREMIUM ZAPUPI ACTION BUTTON */}
               <button
                 type="submit"
-                disabled={isSubmittingRecharge}
-                className="w-full bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-600 hover:brightness-105 active:scale-[0.98] text-white font-black text-xs uppercase tracking-wider py-4 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-green-950/15 transition-all duration-200 cursor-pointer disabled:opacity-50 select-none"
+                disabled={isRedirectingToZapUpi}
+                className="w-full bg-[#22C55E] hover:bg-[#1fbd58] text-white font-black text-xs uppercase tracking-wider py-4 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer disabled:opacity-50 select-none"
               >
-                {isSubmittingRecharge ? (
+                {isRedirectingToZapUpi ? (
                   <>
                     <i className="fa-solid fa-spinner animate-spin text-sm"></i>
-                    <span>Processing Submission...</span>
+                    <span>Connecting Secure Gateway...</span>
                   </>
                 ) : (
                   <>
-                    <i className="fa-solid fa-shield-halved text-xs"></i>
-                    <span>Pay Now</span>
+                    <i className="fa-solid fa-bolt text-xs"></i>
+                    <span>Pay Securely via ZapUPI</span>
                   </>
                 )}
               </button>

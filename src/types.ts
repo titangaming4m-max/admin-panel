@@ -63,6 +63,15 @@ export interface SiteSettings {
   upiButtonText: string;
   qrImageUrl: string;
 
+  // ZapUPI Payment Gateway Settings
+  zapupiApiKey: string;
+  zapupiSuccessUrl: string;
+  zapupiFailedUrl: string;
+  zapupiWebhookUrl: string;
+  zapupiEnabled: boolean;
+  zapupiMode: 'test' | 'live';
+  zapupiApiEndpoint: string;
+
   // Announcement Bar
   announcementText: string;
   announcementBgColor: string;

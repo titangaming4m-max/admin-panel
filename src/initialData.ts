@@ -111,6 +111,15 @@ export const INITIAL_SETTINGS: SiteSettings = {
   upiButtonText: 'Pay via UPI / QR Code',
   qrImageUrl: 'https://i.postimg.cc/gk1nJWcx/IMG-20260708-142226-050.jpg',
 
+  // ZapUPI Settings
+  zapupiApiKey: '',
+  zapupiSuccessUrl: 'http://localhost:3000/?zapupi_status=success',
+  zapupiFailedUrl: 'http://localhost:3000/?zapupi_status=failed',
+  zapupiWebhookUrl: 'http://localhost:3000/api/webhook/zapupi',
+  zapupiEnabled: true,
+  zapupiMode: 'test',
+  zapupiApiEndpoint: 'https://api.zapupi.com/v1/create_order',
+
   announcementText: '🔥 LIMITED TIME OFFER 🔥 1,000 Likes for Just ₹69!',
   announcementBgColor: '#2ce157',
   announcementTextColor: '#ffffff',

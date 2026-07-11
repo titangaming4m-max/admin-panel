@@ -338,78 +338,90 @@ export default function AdminSettings({
         {/* Right Hand: Payment & Announcement Columns */}
         <div className="flex flex-col gap-6">
           
-          {/* Section 4: Payment Gateway details */}
+          {/* Section 4: Payment Gateway details (ZapUPI Auto Gateway) */}
           <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-xs flex flex-col gap-4">
-            <h3 className="text-slate-900 font-extrabold text-xs uppercase tracking-wider border-b border-slate-50 pb-2.5 flex items-center gap-2">
-              <i className="fa-solid fa-qrcode text-[#22c55e]"></i>
-              <span>Payment Gateway</span>
+            <h3 className="text-slate-900 font-extrabold text-xs uppercase tracking-wider border-b border-slate-50 pb-2.5 flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <i className="fa-solid fa-bolt text-[#22c55e]"></i>
+                <span>ZapUPI Payment Gateway</span>
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400 font-bold text-[9px] uppercase tracking-wider">Gateway Status</span>
+                <input
+                  type="checkbox"
+                  checked={localSettings.zapupiEnabled ?? true}
+                  onChange={(e) => handleFieldChange('zapupiEnabled', e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 text-[#22c55e] focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                />
+              </div>
             </h3>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-slate-400 font-bold text-[9px] uppercase tracking-wider">ZapUPI API Key (Zap Key)</label>
+              <input
+                type="text"
+                value={localSettings.zapupiApiKey ?? ''}
+                onChange={(e) => handleFieldChange('zapupiApiKey', e.target.value)}
+                placeholder="Enter your ZapUPI API / Merchant Key"
+                className="bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 font-mono focus:outline-none focus:bg-white"
+              />
+            </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1">
-                <label className="text-slate-400 font-bold text-[9px] uppercase tracking-wider">UPI ID Address</label>
-                <input
-                  type="text"
-                  value={localSettings.upiId}
-                  onChange={(e) => handleFieldChange('upiId', e.target.value)}
-                  className="bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 font-semibold focus:outline-none"
-                />
+                <label className="text-slate-400 font-bold text-[9px] uppercase tracking-wider">Gateway Mode</label>
+                <select
+                  value={localSettings.zapupiMode ?? 'test'}
+                  onChange={(e) => handleFieldChange('zapupiMode', e.target.value as 'test' | 'live')}
+                  className="bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 font-semibold focus:outline-none focus:bg-white cursor-pointer"
+                >
+                  <option value="test">TEST MODE</option>
+                  <option value="live">LIVE MODE</option>
+                </select>
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-slate-400 font-bold text-[9px] uppercase tracking-wider">Payee Name</label>
+                <label className="text-slate-400 font-bold text-[9px] uppercase tracking-wider">API Endpoint</label>
                 <input
                   type="text"
-                  value={localSettings.payeeName}
-                  onChange={(e) => handleFieldChange('payeeName', e.target.value)}
-                  className="bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 font-semibold focus:outline-none"
+                  value={localSettings.zapupiApiEndpoint ?? 'https://api.zapupi.com/v1/create_order'}
+                  onChange={(e) => handleFieldChange('zapupiApiEndpoint', e.target.value)}
+                  className="bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 font-semibold focus:outline-none focus:bg-white"
                 />
               </div>
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="text-slate-400 font-bold text-[9px] uppercase tracking-wider">UPI Button Text</label>
+              <label className="text-slate-400 font-bold text-[9px] uppercase tracking-wider">Webhook URL (ZapUPI callbacks)</label>
               <input
                 type="text"
-                value={localSettings.upiButtonText}
-                onChange={(e) => handleFieldChange('upiButtonText', e.target.value)}
-                className="bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 font-semibold focus:outline-none"
+                value={localSettings.zapupiWebhookUrl ?? ''}
+                onChange={(e) => handleFieldChange('zapupiWebhookUrl', e.target.value)}
+                placeholder="e.g. https://your-domain.com/api/webhook/zapupi"
+                className="bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 font-mono focus:outline-none focus:bg-white"
               />
             </div>
 
-            <div className="flex flex-col gap-2 pt-2">
-              <label className="text-slate-400 font-bold text-[9px] uppercase tracking-wider">UPI QR Code Image (Upload / URL)</label>
-              
-              <div className="grid grid-cols-3 gap-3">
-                {/* QR Preview (shows actual image) */}
-                <div className="aspect-square border border-slate-200 rounded-xl overflow-hidden flex items-center justify-center p-1.5 bg-white shadow-xs">
-                  {localSettings.qrImageUrl ? (
-                    <img
-                      src={localSettings.qrImageUrl}
-                      alt="QR Preview"
-                      className="w-full h-full object-contain"
-                    />
-                  ) : (
-                    <div className="text-slate-400 text-[10px] font-semibold text-center uppercase">No QR</div>
-                  )}
-                </div>
-
-                {/* Upload drag block */}
-                <div className="col-span-2 border-2 border-dashed border-slate-200 rounded-xl p-3 text-center flex flex-col items-center justify-center bg-slate-50 hover:bg-slate-100/50 cursor-pointer">
-                  <i className="fa-solid fa-qrcode text-slate-400 text-lg mb-1"></i>
-                  <span className="text-[10px] text-slate-600 font-extrabold uppercase">Upload QR Code</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => e.target.files && handleQrUpload(e.target.files[0])}
-                    className="hidden"
-                    id="settings-qr-upload"
-                  />
-                  <label htmlFor="settings-qr-upload" className="mt-2 bg-slate-950 text-white text-[8px] font-black uppercase px-2.5 py-1.5 rounded-md cursor-pointer">
-                    Browse File
-                  </label>
-                </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-slate-400 font-bold text-[9px] uppercase tracking-wider">Success Redirect URL</label>
+                <input
+                  type="text"
+                  value={localSettings.zapupiSuccessUrl ?? ''}
+                  onChange={(e) => handleFieldChange('zapupiSuccessUrl', e.target.value)}
+                  placeholder="https://your-domain.com/?zapupi_status=success"
+                  className="bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 font-semibold focus:outline-none focus:bg-white"
+                />
               </div>
-
+              <div className="flex flex-col gap-1">
+                <label className="text-slate-400 font-bold text-[9px] uppercase tracking-wider">Failed Redirect URL</label>
+                <input
+                  type="text"
+                  value={localSettings.zapupiFailedUrl ?? ''}
+                  onChange={(e) => handleFieldChange('zapupiFailedUrl', e.target.value)}
+                  placeholder="https://your-domain.com/?zapupi_status=failed"
+                  className="bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 font-semibold focus:outline-none focus:bg-white"
+                />
+              </div>
             </div>
           </div>
 

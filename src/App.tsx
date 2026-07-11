@@ -79,6 +79,89 @@ export default function App() {
     return local ? JSON.parse(local) : [];
   });
 
+  // --- ZAPUPI PAYMENT & DYNAMIC SERVER SYNCS ---
+  const [zapupiPaymentResult, setZapupiPaymentResult] = useState<{ status: 'success' | 'failed'; orderId?: string } | null>(null);
+
+  // Load from backend on startup
+  useEffect(() => {
+    fetch('/api/data')
+      .then(res => res.json())
+      .then(db => {
+        if (db && Object.keys(db).length > 0) {
+          if (db.services) setServices(db.services);
+          if (db.plans) setPlans(db.plans);
+          if (db.settings) setSettings(db.settings);
+          if (db.orders) setOrders(db.orders);
+          if (db.banners) setBanners(db.banners);
+          if (db.activityLogs) setActivityLogs(db.activityLogs);
+          if (db.wallets) setWallets(db.wallets);
+          if (db.walletTransactions) setWalletTransactions(db.walletTransactions);
+          if (db.walletSettings) setWalletSettings(db.walletSettings);
+          if (db.walletLogs) setWalletLogs(db.walletLogs);
+          if (db.rechargeRequests) setRechargeRequests(db.rechargeRequests);
+        } else {
+          // If server database is empty, seed it with the current client data
+          const seed = {
+            services,
+            plans,
+            settings,
+            orders,
+            banners,
+            activityLogs,
+            wallets,
+            walletTransactions,
+            walletSettings,
+            walletLogs,
+            rechargeRequests
+          };
+          fetch('/api/data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(seed)
+          }).catch(err => console.error('Error seeding DB on startup:', err));
+        }
+      })
+      .catch(err => console.error('Error loading DB on startup:', err));
+  }, []);
+
+  // Listen to state changes and push to server DB
+  useEffect(() => {
+    const syncData = {
+      services,
+      plans,
+      settings,
+      orders,
+      banners,
+      activityLogs,
+      wallets,
+      walletTransactions,
+      walletSettings,
+      walletLogs,
+      rechargeRequests
+    };
+    fetch('/api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(syncData)
+    }).catch(err => console.error('Error syncing DB to server:', err));
+  }, [services, plans, settings, orders, banners, activityLogs, wallets, walletTransactions, walletSettings, walletLogs, rechargeRequests]);
+
+  // Check URL params for ZapUPI checkout outcomes
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('zapupi_status');
+    const orderId = params.get('order_id');
+
+    if (status) {
+      setZapupiPaymentResult({
+        status: status === 'success' ? 'success' : 'failed',
+        orderId: orderId || undefined
+      });
+      // Clear address bar cleanly
+      window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+    }
+  }, []);
+
   // --- PERSISTENCE EFFECT WRITERS ---
   useEffect(() => {
     localStorage.setItem('zyro_services', JSON.stringify(services));
@@ -798,6 +881,50 @@ export default function App() {
     setGeneratedOrderId('');
     
     setShowPaymentModal(true);
+  };
+ 
+  // ZapUPI Order payment handler
+  const [isRedirectingToZapUpi, setIsRedirectingToZapUpi] = useState(false);
+
+  const handlePayViaZapUpi = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPlan || !paymentService) return;
+
+    if (!custName.trim() || !custWhatsApp.trim()) {
+      alert('Please enter your Name and WhatsApp Contact Number to continue.');
+      return;
+    }
+
+    setIsRedirectingToZapUpi(true);
+
+    try {
+      const res = await fetch('/api/payment/zapupi/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: selectedPlan.price,
+          customer_name: custName,
+          customer_mobile: custWhatsApp,
+          plan_id: selectedPlan.id,
+          service_id: paymentService.id,
+          is_wallet_recharge: false
+        })
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to initiate ZapUPI transaction');
+      }
+
+      const data = await res.json();
+      if (data.status === 'success' && data.payment_url) {
+        window.location.href = data.payment_url;
+      } else {
+        throw new Error(data.message || 'Unknown response from ZapUPI server');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Unable to connect to payment gateway. Please try again.');
+      setIsRedirectingToZapUpi(false);
+    }
   };
  
   // Submit Order Form
@@ -2229,7 +2356,7 @@ export default function App() {
                 )}
 
                 {checkoutMethod === 'upi' && (
-                  <form onSubmit={handleClientOrderSubmit} className="flex flex-col gap-4.5 text-left">
+                  <form onSubmit={handlePayViaZapUpi} className="flex flex-col gap-4.5 text-left animate-in fade-in duration-200">
                     <div className="flex items-center justify-between">
                       {walletSettings.walletEnabled && (
                         <button
@@ -2241,87 +2368,48 @@ export default function App() {
                           <span>Back</span>
                         </button>
                       )}
-                      <span className="bg-[#0B1528]/10 text-[#0B1528] text-[8px] font-black uppercase px-2 py-0.5 rounded-full ml-auto">
-                        Manual Verification
+                      <span className="bg-emerald-50 text-emerald-600 text-[8px] font-black uppercase px-2.5 py-1 rounded-full border border-emerald-100 select-none ml-auto">
+                        Auto Gateway
                       </span>
                     </div>
 
-                    {/* QR Code & UPI Payment Box */}
-                    <div className="flex flex-col gap-3.5 bg-gradient-to-b from-[#FAFDFB] to-white p-4 rounded-2xl border border-emerald-100 shadow-xs">
-                      <div className="flex items-center gap-2 border-b border-emerald-50 pb-2 select-none">
-                        <span className="w-2 h-2 rounded-full bg-[#22C55E]"></span>
-                        <h6 className="text-slate-800 font-black text-[10px] uppercase tracking-wider">
-                          UPI Payment Gateway
+                    {/* ZapUPI Info card */}
+                    <div className="bg-[#0B1528] text-white rounded-2xl p-4 flex flex-col gap-3.5 relative overflow-hidden select-none">
+                      <div className="absolute right-4 top-4 text-emerald-400 font-extrabold text-[8px] uppercase tracking-wider">
+                        Live Auto
+                      </div>
+                      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <h6 className="text-[#a0aec0] font-black text-[9.5px] uppercase tracking-wider">
+                          ZapUPI Auto Payment Gateway
                         </h6>
                       </div>
-
-                      {/* QR Image Display */}
-                      <div className="flex flex-col items-center gap-2 py-1 select-none">
-                        <p className="text-slate-500 font-extrabold text-[9px] tracking-wide uppercase text-center max-w-[260px]">
-                          Scan QR Code to pay ₹{selectedPlan.price}
-                        </p>
-                        
-                        <div className="w-32 h-32 bg-white border-2 border-emerald-50 p-2 rounded-2xl flex items-center justify-center relative shadow-sm overflow-hidden mx-auto">
-                          {settings.qrImageUrl ? (
-                            <img
-                              src={settings.qrImageUrl}
-                              alt="Payment Gateway QR Code"
-                              className="w-full h-full object-contain"
-                              referrerPolicy="no-referrer"
-                            />
-                          ) : (
-                            <div className="text-slate-400 text-xs font-bold uppercase text-center p-4">No QR Code Defined</div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Dynamic UPI ID copy target */}
-                      {settings.upiId && (
-                        <div className="flex flex-col gap-1.5 select-none pt-1.5 border-t border-slate-100">
-                          <label className="text-slate-400 font-bold text-[9px] uppercase tracking-wider text-center">
-                            Or copy payee UPI ID & pay on any payment app
-                          </label>
-                          <div className="flex items-center gap-2 bg-[#F1F5F9] p-2 rounded-xl border border-slate-100">
-                            <span className="text-slate-700 font-extrabold text-[11px] select-all flex-1 text-center font-mono">
-                              {settings.upiId}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => copyToClipboard(settings.upiId, 'upi_id')}
-                              className="bg-white hover:bg-slate-50 text-slate-600 px-3 py-1 rounded-lg text-[10px] font-bold border border-slate-200 cursor-pointer transition-colors shrink-0"
-                            >
-                              {copiedText === 'upi_id' ? (
-                                <span className="text-emerald-500 font-black">Copied!</span>
-                              ) : (
-                                <span>Copy</span>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                      )}
+                      <p className="text-[#a0aec0] text-[10.5px] font-semibold leading-relaxed text-left">
+                        Secure instant checkout! Complete the payment on any UPI application (PhonePe, GPay, Paytm, etc.). Your order will be automatically verified and completed.
+                      </p>
                     </div>
 
-                    {/* Section B: FULFILLMENT INPUT FIELDS BELOW UPI PAYMENT SECTION */}
+                    {/* Section B: FULFILLMENT INPUT FIELDS */}
                     <div className="flex flex-col gap-3.5 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
                       <div className="flex items-center gap-2 border-b border-slate-100 pb-2 select-none">
                         <span className="w-2 h-2 rounded-full bg-slate-400"></span>
                         <h6 className="text-slate-800 font-black text-[10px] uppercase tracking-wider">
-                          Fulfillment details
+                          Customer details
                         </h6>
                       </div>
 
-                      {/* Field 1: Name listed in GPay */}
+                      {/* Field 1: Name */}
                       <div className="flex flex-col gap-1">
                         <label className="text-slate-500 font-extrabold text-[9px] uppercase tracking-wider select-none text-left flex items-center gap-1">
                           <i className="fa-regular fa-user text-slate-400 text-[8px]"></i>
-                          <span>Name (As listed in GPay)</span>
+                          <span>Your Name *</span>
                         </label>
                         <input
                           type="text"
                           required
                           value={custName}
                           onChange={(e) => setCustName(e.target.value)}
-                          placeholder="Enter GPay name"
+                          placeholder="Enter your name"
                           className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-slate-800 text-xs font-semibold focus:outline-none focus:border-green-500 text-left"
                         />
                       </div>
@@ -2330,62 +2418,15 @@ export default function App() {
                       <div className="flex flex-col gap-1">
                         <label className="text-slate-500 font-extrabold text-[9px] uppercase tracking-wider select-none text-left flex items-center gap-1">
                           <i className="fa-brands fa-whatsapp text-[#22C55E] text-[9px]"></i>
-                          <span>WhatsApp Contact</span>
+                          <span>WhatsApp Contact *</span>
                         </label>
                         <input
                           type="tel"
                           required
                           value={custWhatsApp}
                           onChange={(e) => setCustWhatsApp(e.target.value)}
-                          placeholder="e.g. +91 98765 43210"
+                          placeholder="e.g. 9876543210"
                           className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-slate-800 text-xs font-semibold focus:outline-none focus:border-green-500 text-left"
-                        />
-                      </div>
-
-                      {/* Field 3: UTR Number */}
-                      <div className="flex flex-col gap-1">
-                        <label className="text-slate-500 font-extrabold text-[9px] uppercase tracking-wider select-none text-left flex items-center gap-1">
-                          <i className="fa-solid fa-receipt text-slate-400 text-[8px]"></i>
-                          <span>UTR Number (12-30 Alphanumeric) *</span>
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={upiUtr}
-                          onChange={(e) => setUpiUtr(e.target.value)}
-                          placeholder="Enter 12 to 30 digit UTR Number"
-                          className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-slate-800 text-xs font-semibold focus:outline-none focus:border-green-500 text-left font-mono"
-                        />
-                      </div>
-
-                      {/* Field 4: Contact Mobile Number */}
-                      <div className="flex flex-col gap-1">
-                        <label className="text-slate-500 font-extrabold text-[9px] uppercase tracking-wider select-none text-left flex items-center gap-1">
-                          <i className="fa-solid fa-phone text-slate-400 text-[8px]"></i>
-                          <span>Contact Mobile Number (10 digits) *</span>
-                        </label>
-                        <input
-                          type="tel"
-                          required
-                          value={upiContact}
-                          onChange={(e) => setUpiContact(e.target.value)}
-                          placeholder="Enter 10-digit Mobile Number"
-                          className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-slate-800 text-xs font-semibold focus:outline-none focus:border-green-500 text-left"
-                        />
-                      </div>
-
-                      {/* Field 5: Optional Remarks */}
-                      <div className="flex flex-col gap-1">
-                        <label className="text-slate-500 font-extrabold text-[9px] uppercase tracking-wider select-none text-left flex items-center gap-1">
-                          <i className="fa-regular fa-comment-dots text-slate-400 text-[8px]"></i>
-                          <span>Optional Remarks</span>
-                        </label>
-                        <textarea
-                          rows={2}
-                          value={upiRemarks}
-                          onChange={(e) => setUpiRemarks(e.target.value)}
-                          placeholder="Enter any payment notes (Optional)"
-                          className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-slate-800 text-xs font-semibold focus:outline-none focus:border-green-500 text-left resize-none"
                         />
                       </div>
                     </div>
@@ -2393,18 +2434,18 @@ export default function App() {
                     {/* Submitting Actions */}
                     <button
                       type="submit"
-                      disabled={isSubmittingOrder}
-                      className="w-full bg-[#0B1528] hover:bg-[#12213D] disabled:bg-slate-800 text-white font-black text-xs uppercase tracking-wider py-4 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md transition-colors cursor-pointer"
+                      disabled={isRedirectingToZapUpi}
+                      className="w-full bg-[#0B1528] hover:bg-[#12213D] disabled:bg-slate-800 text-white font-black text-xs uppercase tracking-wider py-4 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md transition-colors cursor-pointer select-none"
                     >
-                      {isSubmittingOrder ? (
+                      {isRedirectingToZapUpi ? (
                         <>
                           <i className="fa-solid fa-spinner animate-spin text-xs"></i>
-                          <span>Processing...</span>
+                          <span>Connecting Secure Gateway...</span>
                         </>
                       ) : (
                         <>
-                          <i className="fa-regular fa-credit-card text-sm"></i>
-                          <span>Pay Now</span>
+                          <i className="fa-solid fa-bolt text-xs"></i>
+                          <span>Pay ₹{selectedPlan.price} Securely</span>
                         </>
                       )}
                     </button>
@@ -2493,6 +2534,78 @@ export default function App() {
                 Close Window
               </button>
             </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* ZAPUPI SECURE PAYMENT OUTCOME DIALOG                          */}
+      {/* ------------------------------------------------------------- */}
+      {zapupiPaymentResult && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center z-[100] p-4 transition-all duration-300">
+          <div className="bg-white rounded-[28px] w-full max-w-sm shadow-2xl overflow-hidden border border-slate-100 flex flex-col p-6 animate-in fade-in zoom-in-95 duration-200 text-center">
+            
+            {zapupiPaymentResult.status === 'success' ? (
+              <>
+                <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center text-4xl mb-4 shadow-inner mx-auto animate-bounce">
+                  <i className="fa-solid fa-circle-check"></i>
+                </div>
+                <h4 className="text-slate-900 font-black text-lg uppercase tracking-tight">Payment Approved!</h4>
+                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider mt-1">Automatic Webhook Verification</p>
+                
+                <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-2xl w-full my-4 text-left">
+                  <p className="text-emerald-800 text-xs font-semibold leading-relaxed">
+                    Your ZapUPI payment was successfully processed! Your wallet balance has been credited or order has been created.
+                  </p>
+                  {zapupiPaymentResult.orderId && (
+                    <div className="mt-3 pt-2.5 border-t border-emerald-100/60 flex justify-between items-center text-[10px] font-bold text-emerald-700">
+                      <span className="uppercase">Order Reference:</span>
+                      <span className="font-mono bg-white px-2 py-0.5 rounded border border-emerald-200 select-all">{zapupiPaymentResult.orderId}</span>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => setZapupiPaymentResult(null)}
+                  className="w-full bg-[#22C55E] hover:bg-[#1fbd58] text-white py-3.5 rounded-xl font-black text-xs uppercase tracking-wider shadow-md transition-colors cursor-pointer select-none"
+                >
+                  Back To Panel
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center text-4xl mb-4 shadow-inner mx-auto animate-pulse">
+                  <i className="fa-solid fa-circle-xmark"></i>
+                </div>
+                <h4 className="text-slate-900 font-black text-lg uppercase tracking-tight">Payment Unverified</h4>
+                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider mt-1">Transaction Cancelled or Failed</p>
+                
+                <div className="bg-rose-50/50 border border-rose-100 p-4 rounded-2xl w-full my-4 text-left">
+                  <p className="text-rose-800 text-xs font-semibold leading-relaxed">
+                    The payment was either cancelled, timed out, or rejected by the payment gateway. If any amount was deducted, please contact Support.
+                  </p>
+                </div>
+
+                <div className="flex gap-2 w-full">
+                  <button
+                    onClick={() => {
+                      setZapupiPaymentResult(null);
+                      setShowSupportModal(true);
+                    }}
+                    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer select-none"
+                  >
+                    Contact Support
+                  </button>
+                  <button
+                    onClick={() => setZapupiPaymentResult(null)}
+                    className="flex-1 bg-slate-900 hover:bg-slate-850 text-white py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider shadow-md transition-colors cursor-pointer select-none"
+                  >
+                    Close
+                  </button>
+                </div>
+              </>
+            )}
 
           </div>
         </div>
